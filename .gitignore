@@ -1,0 +1,14 @@
+# Helm
+charts/
+Chart.lock
+*.tgz
+
+# Test output
+.helm-tests/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

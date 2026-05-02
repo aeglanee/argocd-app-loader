@@ -1,0 +1,3 @@
+# Library charts don't have functional values, but Helm requires this file.
+# Anything declared here is documentation only — consumers override in their own
+# values.yaml and the loader reads .Values from the consumer context.

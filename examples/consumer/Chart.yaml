@@ -1,0 +1,10 @@
+apiVersion: v2
+name: cluster
+description: Minimal end-to-end example of consuming the argocd-apps library.
+type: application
+version: 0.0.1
+
+dependencies:
+  - name: argocd-apps
+    version: ">=0.1.0"
+    repository: "file://../../"

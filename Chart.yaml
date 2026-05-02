@@ -1,0 +1,22 @@
+apiVersion: v2
+name: argocd-apps
+description: |
+  Helm library chart that renders Argo CD Application and AppProject CRs from a
+  filesystem layout. Consumers organize their cluster as
+  apps/<group>/<name>/{Chart.yaml,app.yaml,values.yaml,templates/} wrappers and
+  this library discovers them, emits one Application per app and one AppProject
+  per group, and cascades cluster-wide globals into every wrapper release.
+type: library
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/aeglanee/argocd-apps
+sources:
+  - https://github.com/aeglanee/argocd-apps
+keywords:
+  - argocd
+  - gitops
+  - app-of-apps
+  - helm-library
+maintainers:
+  - name: aeglanee
+    url: https://github.com/aeglanee

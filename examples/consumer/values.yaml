@@ -1,0 +1,12 @@
+global:
+  domain: example.com
+  clusterServer: https://kubernetes.default.svc
+  argocdNamespace: argocd
+  targetRevision: HEAD
+  useLocalGit: false
+  remoteGitRepo: "git@github.com:example/homelab.git"
+  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:example/homelab.git"
+  repoBasePath: argocd2/cluster
+
+apps:
+  hello: true

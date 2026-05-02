@@ -1,0 +1,10 @@
+apiVersion: v2
+name: hello
+type: application
+version: 0.1.0
+
+# Replace with your real upstream chart dependency.
+# dependencies:
+#   - name: <upstream>
+#     version: "x.y.z"
+#     repository: "https://example.com/charts"
