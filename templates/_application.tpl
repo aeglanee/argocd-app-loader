@@ -17,7 +17,15 @@
 {{- $project := .appMeta.project | default .groupMeta.project | default .group -}}
 {{- $namespace := .appMeta.namespace | default .name -}}
 {{- $releaseName := .appMeta.releaseName | default .name -}}
-{{- $appPath := .appMeta.path | default (printf "%s/apps/%s/%s" (default "argocd2/cluster" .global.repoBasePath) .group .name) -}}
+{{- $base := default "" .global.repoBasePath -}}
+{{- $appPath := .appMeta.path -}}
+{{- if not $appPath -}}
+  {{- if $base -}}
+    {{- $appPath = printf "%s/apps/%s/%s" $base .group .name -}}
+  {{- else -}}
+    {{- $appPath = printf "apps/%s/%s" .group .name -}}
+  {{- end -}}
+{{- end -}}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

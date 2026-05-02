@@ -83,12 +83,13 @@ That's the entire integration. Everything else is your data on disk.
 # values.yaml
 global:
   domain: example.com
-  remoteGitRepo: "git@github.com:you/homelab.git"
-  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:you/homelab.git"
+  remoteGitRepo: "git@github.com:example/cluster.git"
+  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:example/cluster.git"
   useLocalGit: false
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
   targetRevision: HEAD
+  # repoBasePath: ""  # set if the consumer chart is not at the repo root
 
 apps:
   cilium: true
@@ -172,7 +173,7 @@ Recognised by the loader:
 | `clusterServer` | Application destination cluster (default `https://kubernetes.default.svc`) |
 | `argocdNamespace` | Where Application/AppProject CRs live (default `argocd`) |
 | `targetRevision` | Default revision for Applications (default `HEAD`) |
-| `repoBasePath` | Path prefix for the auto-built `path:` (default `argocd2/cluster`) |
+| `repoBasePath` | Path prefix for the auto-built `path:` — set when the consumer chart is not at the repo root (default empty) |
 
 Everything else under `global:` is forwarded into each wrapper release as
 `.Values.global.*` and propagates further down via Helm's subchart `global:`
@@ -190,6 +191,36 @@ default to enabled.
 |---|---|---|
 | `appsRoot` | `apps` | Root directory the loader scans |
 | `requireToggle` | `true` | If true, apps must be explicitly enabled in `.Values.apps` |
+
+## Publishing & consuming
+
+Helm has no native git dependency mechanism, so consumers fetch the chart
+from one of:
+
+- **OCI registry** (recommended):
+  ```yaml
+  dependencies:
+    - name: argocd-apps
+      version: "0.1.0"
+      repository: "oci://ghcr.io/<owner>/charts"
+  ```
+  Publish from CI with `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`.
+  Argo CD supports OCI Helm repos natively.
+
+- **HTTPS Helm repo** (e.g. GitHub Pages):
+  ```yaml
+  dependencies:
+    - name: argocd-apps
+      version: "0.1.0"
+      repository: "https://<owner>.github.io/argocd-apps"
+  ```
+  Requires a CI workflow that packages the chart and updates `index.yaml`
+  on the gh-pages branch.
+
+- **Local filesystem** (`file://`): only useful when iterating on the
+  library and a consumer side-by-side in the same checkout. Not portable.
+  The `examples/consumer/` directory in this repo uses this for its
+  in-repo demo, but real deployments should use OCI or HTTPS.
 
 ## Status
 

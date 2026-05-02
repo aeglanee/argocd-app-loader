@@ -4,6 +4,14 @@ description: Minimal end-to-end example of consuming the argocd-apps library.
 type: application
 version: 0.0.1
 
+# This example is checked into the same repo as the library itself, so it
+# resolves the dependency via a relative file:// path. Real consumers should
+# pull a published version from an OCI or HTTPS Helm repository instead, e.g.:
+#
+#   repository: "oci://ghcr.io/<owner>/charts"
+#   repository: "https://<owner>.github.io/argocd-apps"
+#
+# See README.md "Quick start" for the published-consumer setup.
 dependencies:
   - name: argocd-apps
     version: ">=0.1.0"

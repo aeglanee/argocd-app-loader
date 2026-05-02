@@ -4,9 +4,9 @@ global:
   argocdNamespace: argocd
   targetRevision: HEAD
   useLocalGit: false
-  remoteGitRepo: "git@github.com:example/homelab.git"
-  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:example/homelab.git"
-  repoBasePath: argocd2/cluster
+  remoteGitRepo: "git@github.com:example/cluster.git"
+  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:example/cluster.git"
+  repoBasePath: examples/consumer
 
 apps:
   hello: true
