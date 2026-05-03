@@ -12,21 +12,26 @@
   of where this library is installed.
 
   Conventions consumed:
-    apps/<group>/_group.yaml          AppProject metadata
-    apps/<group>/<name>/app.yaml      Application metadata
-    .Values.global                    Cluster-wide globals (cascaded into apps)
-    .Values.apps.<name>               Boolean on/off toggle (default true if missing)
+    apps/<group>/_group.yaml             AppProject metadata
+    apps/<group>/<name>/app.yaml         Application metadata
+    .Values.global                       Cluster-wide globals (cascaded into apps)
+    .Values.global.apps.<name>           Boolean on/off toggle for each app
+
+  The toggle map lives under .Values.global.apps so it cascades into every
+  wrapper release alongside the rest of global.* — wrappers can branch on
+  whether peer apps are enabled (e.g. enable OIDC only if authentik is on).
 
   Customizable via .Values.argocdAppLoader:
     appsRoot       : root path to scan (default "apps")
-    requireToggle  : if true, an app is only emitted when .Values.apps.<name>
-                     is explicitly true. If false, missing toggles default to
+    requireToggle  : if true, an app is only emitted when its toggle is
+                     explicitly true. If false, missing toggles default to
                      true. (default: true)
 */ -}}
 {{- define "argocd-app-loader.loader" -}}
 {{- $cfg := default dict .Values.argocdAppLoader -}}
 {{- $appsRoot := default "apps" $cfg.appsRoot -}}
 {{- $requireToggle := default true $cfg.requireToggle -}}
+{{- $toggles := default dict .Values.global.apps -}}
 
 {{- /* Emit one Application per discovered app.yaml */ -}}
 {{- $appGlob := printf "%s/*/*/app.yaml" $appsRoot -}}
@@ -34,7 +39,7 @@
   {{- $parts := splitList "/" $path -}}
   {{- $group := index $parts 1 -}}
   {{- $name  := index $parts 2 -}}
-  {{- $toggle := index $.Values.apps $name -}}
+  {{- $toggle := index $toggles $name -}}
   {{- $enabled := ternary $toggle (default false $toggle) (kindIs "bool" $toggle) -}}
   {{- if not $requireToggle -}}
     {{- $enabled = ternary $toggle true (kindIs "bool" $toggle) -}}

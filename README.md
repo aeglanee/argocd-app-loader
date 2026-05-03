@@ -64,7 +64,7 @@ type: application
 version: 0.1.0
 dependencies:
   - name: argocd-app-loader
-    version: "0.1.1"
+    version: "0.1.2"
     repository: "oci://ghcr.io/aeglanee/charts"
     # Or, for a local checkout during library development:
     # repository: "file://../../argocd-app-loader"
@@ -183,11 +183,23 @@ Everything else under `global:` is forwarded into each wrapper release as
 `.Values.global.*` and propagates further down via Helm's subchart `global:`
 mechanism.
 
-### App toggles (`.Values.apps`)
+### App toggles (`.Values.global.apps`)
 
-Map of `<app-name>: bool`. Default behavior requires explicit `true`. Set
+Map of `<app-name>: bool`, declared **inside `global:`** so it cascades
+into every wrapper release alongside the rest of the globals. Wrappers
+can branch on whether peer apps are enabled — e.g. enable an OIDC
+provider in chart X only if `global.apps.authentik` is true. Default
+behavior requires explicit `true`; set
 `.Values.argocdAppLoader.requireToggle: false` to flip this so missing
 entries default to enabled.
+
+```yaml
+global:
+  apps:
+    cilium: true
+    authentik: true
+    grafana: false
+```
 
 ### Loader configuration (`.Values.argocdAppLoader`)
 
@@ -205,7 +217,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.1.1"
+      version: "0.1.2"
       repository: "oci://ghcr.io/<owner>/charts"
   ```
   Publish from CI with
@@ -216,7 +228,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.1.1"
+      version: "0.1.2"
       repository: "https://<owner>.github.io/argocd-app-loader"
   ```
   Requires a CI workflow that packages the chart and updates `index.yaml`
