@@ -49,15 +49,28 @@
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
     {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict -}}
     {{- /*
-      Read the wrapper's values.yaml, tpl-render it against the consumer
-      chart context (so {{ .Values.global.* }} resolves), and parse to YAML.
-      The rendered values are merged with the cascaded global block and
-      injected into the emitted Application via helm.valuesObject — this is
-      the only way to get tpl semantics on values that feed an upstream
-      subchart, since Helm itself doesn't tpl values.yaml.
+      Read the wrapper's templated values, tpl-render against the consumer
+      chart context, and parse to YAML. The rendered values are merged with
+      the cascaded global block and injected into the emitted Application
+      via helm.valuesObject — this is the only way to get tpl semantics on
+      values feeding an upstream subchart, since Helm itself doesn't tpl
+      values.yaml.
+
+      Preferred filename: values.yaml.gotmpl. Helm does NOT auto-load it
+      (only files literally named values.yaml are auto-loaded), so wrappers
+      can use Go-template directives — including conditionals at YAML
+      top level — without breaking Helm's raw parse of the chart. If
+      values.yaml.gotmpl is absent we fall back to values.yaml for
+      back-compat with charts that only use string-internal templating.
     */ -}}
-    {{- $valuesPath := printf "%s/%s/%s/values.yaml" $appsRoot $group $name -}}
-    {{- $rawValues := $.Files.Get $valuesPath -}}
+    {{- $rawValues := "" -}}
+    {{- $tmplPath := printf "%s/%s/%s/values.yaml.gotmpl" $appsRoot $group $name -}}
+    {{- $plainPath := printf "%s/%s/%s/values.yaml" $appsRoot $group $name -}}
+    {{- if $.Files.Get $tmplPath -}}
+      {{- $rawValues = $.Files.Get $tmplPath -}}
+    {{- else if $.Files.Get $plainPath -}}
+      {{- $rawValues = $.Files.Get $plainPath -}}
+    {{- end -}}
     {{- $wrapperValues := dict -}}
     {{- if $rawValues -}}
       {{- $rendered := tpl $rawValues $ -}}
