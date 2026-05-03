@@ -1,8 +1,8 @@
 {{- /*
-  argocd-apps.appproject — render one Argo CD AppProject from a metadata dict.
+  argocd-app-loader.appproject — render one Argo CD AppProject from a metadata dict.
 
   Permissive: any AppProject spec field declared in meta passes through via
-  toYaml. Sensible homelab defaults applied for fields not declared.
+  toYaml. Sensible defaults applied for fields not declared.
 
   Expected input dict keys:
     name   : project name (= group folder name by convention)
@@ -10,7 +10,7 @@
     global : .Values.global from the consumer chart
     Values : full consumer .Values (so tpl works against it)
 */ -}}
-{{- define "argocd-apps.appproject" -}}
+{{- define "argocd-app-loader.appproject" -}}
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:

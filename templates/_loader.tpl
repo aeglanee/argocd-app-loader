@@ -1,11 +1,11 @@
 {{- /*
-  argocd-apps.loader — discover apps + groups on the consumer chart's filesystem
+  argocd-app-loader.loader — discover apps + groups on the consumer chart's filesystem
   and emit one Application per enabled app + one AppProject per group.
 
   Call this from a single template file in the consumer chart, e.g.:
 
       # consumer/templates/render.yaml
-      {{- include "argocd-apps.loader" . -}}
+      {{- include "argocd-app-loader.loader" . -}}
 
   $.Files always refers to the root consumer chart, so this define reads
   apps/<group>/<app>/app.yaml relative to the consumer's directory regardless
@@ -17,14 +17,14 @@
     .Values.global                    Cluster-wide globals (cascaded into apps)
     .Values.apps.<name>               Boolean on/off toggle (default true if missing)
 
-  Customizable via .Values.argocdApps:
+  Customizable via .Values.argocdAppLoader:
     appsRoot       : root path to scan (default "apps")
     requireToggle  : if true, an app is only emitted when .Values.apps.<name>
                      is explicitly true. If false, missing toggles default to
                      true. (default: true)
 */ -}}
-{{- define "argocd-apps.loader" -}}
-{{- $cfg := default dict .Values.argocdApps -}}
+{{- define "argocd-app-loader.loader" -}}
+{{- $cfg := default dict .Values.argocdAppLoader -}}
 {{- $appsRoot := default "apps" $cfg.appsRoot -}}
 {{- $requireToggle := default true $cfg.requireToggle -}}
 
@@ -44,7 +44,7 @@
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
     {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict }}
 ---
-{{ include "argocd-apps.application" (dict
+{{ include "argocd-app-loader.application" (dict
     "name"      $name
     "group"     $group
     "appMeta"   $appMeta
@@ -62,7 +62,7 @@
   {{- $group := index (splitList "/" $path) 1 -}}
   {{- $meta  := $.Files.Get $path | fromYaml | default dict }}
 ---
-{{ include "argocd-apps.appproject" (dict
+{{ include "argocd-app-loader.appproject" (dict
     "name"   $group
     "meta"   $meta
     "global" $.Values.global

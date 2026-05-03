@@ -1,5 +1,5 @@
 {{- /*
-  argocd-apps.application — render one Argo CD Application from a metadata dict.
+  argocd-app-loader.application — render one Argo CD Application from a metadata dict.
 
   Permissive: any field declared in the input dict's appMeta passes through
   via toYaml, mirroring the style of argoproj/argo-helm/charts/argocd-apps.
@@ -12,7 +12,7 @@
     global    : .Values.global from the consumer chart
     Values    : full consumer .Values (so tpl works against it)
 */ -}}
-{{- define "argocd-apps.application" -}}
+{{- define "argocd-app-loader.application" -}}
 {{- $defaultRepo := ternary .global.localGitRepo .global.remoteGitRepo (default false .global.useLocalGit) -}}
 {{- $project := .appMeta.project | default .groupMeta.project | default .group -}}
 {{- $namespace := .appMeta.namespace | default .name -}}

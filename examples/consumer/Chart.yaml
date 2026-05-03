@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cluster
-description: Minimal end-to-end example of consuming the argocd-apps library.
+description: Minimal end-to-end example of consuming the argocd-app-loader library.
 type: application
 version: 0.0.1
 
@@ -9,10 +9,10 @@ version: 0.0.1
 # pull a published version from an OCI or HTTPS Helm repository instead, e.g.:
 #
 #   repository: "oci://ghcr.io/<owner>/charts"
-#   repository: "https://<owner>.github.io/argocd-apps"
+#   repository: "https://<owner>.github.io/argocd-app-loader"
 #
 # See README.md "Quick start" for the published-consumer setup.
 dependencies:
-  - name: argocd-apps
+  - name: argocd-app-loader
     version: ">=0.1.0"
     repository: "file://../../"

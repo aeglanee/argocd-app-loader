@@ -1,17 +1,18 @@
 apiVersion: v2
-name: argocd-apps
+name: argocd-app-loader
 description: |
-  Helm library chart that renders Argo CD Application and AppProject CRs from a
-  filesystem layout. Consumers organize their cluster as
-  apps/<group>/<name>/{Chart.yaml,app.yaml,values.yaml,templates/} wrappers and
-  this library discovers them, emits one Application per app and one AppProject
-  per group, and cascades cluster-wide globals into every wrapper release.
+  Helm library chart that discovers per-app wrapper charts on the consumer's
+  filesystem and emits one Argo CD Application per app + one AppProject per
+  group. Cluster-wide globals cascade into every wrapper release via
+  helm.valuesObject and Helm's subchart global propagation. Style influenced
+  by argoproj/argo-helm/charts/argocd-apps; the differentiator is filesystem
+  discovery instead of a flat values map.
 type: library
-version: 0.1.0
-appVersion: "0.1.0"
-home: https://github.com/aeglanee/argocd-apps
+version: 0.1.1
+appVersion: "0.1.1"
+home: https://github.com/aeglanee/argocd-app-loader
 sources:
-  - https://github.com/aeglanee/argocd-apps
+  - https://github.com/aeglanee/argocd-app-loader
 keywords:
   - argocd
   - gitops

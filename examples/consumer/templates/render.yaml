@@ -1,1 +1,1 @@
-{{- include "argocd-apps.loader" . -}}
+{{- include "argocd-app-loader.loader" . -}}

@@ -1,8 +1,14 @@
-# argocd-apps
+# argocd-app-loader
 
 A Helm **library chart** that renders Argo CD `Application` and `AppProject`
-custom resources from a filesystem layout. Drop it into your cluster
+custom resources from a **filesystem layout**. Drop it into your cluster
 "app-of-apps" chart and stop maintaining a 500-line registry of every app.
+
+> Style and permissive-templating approach influenced by
+> [`argoproj/argo-helm/charts/argocd-apps`](https://github.com/argoproj/argo-helm/tree/main/charts/argocd-apps).
+> The differentiator here is **filesystem discovery** — apps are scanned
+> from disk instead of declared in a flat values map — and **automatic
+> globals cascade** via `helm.valuesObject`.
 
 ## What it does
 
@@ -27,8 +33,8 @@ apps/
 
 …the library:
 
-- Walks `apps/*/*/app.yaml` and emits one `Application` per app.
-- Walks `apps/*/_group.yaml` and emits one `AppProject` per group.
+- Walks `apps/<group>/<app>/app.yaml` and emits one `Application` per app.
+- Walks `apps/<group>/_group.yaml` and emits one `AppProject` per group.
 - Auto-derives the project name from the group folder, the `path:` from the
   app folder, and (when configured) the repo URL from a single global
   `useLocalGit` toggle.
@@ -57,13 +63,11 @@ name: cluster
 type: application
 version: 0.1.0
 dependencies:
-  - name: argocd-apps
-    version: "0.1.0"
-    # During development, point at a local checkout:
-    repository: "file://../../argocd-apps"
-    # Once published, switch to a Helm/OCI repo URL:
-    # repository: "oci://ghcr.io/aeglanee/charts"
-    # repository: "https://aeglanee.github.io/argocd-apps"
+  - name: argocd-app-loader
+    version: "0.1.1"
+    repository: "oci://ghcr.io/aeglanee/charts"
+    # Or, for a local checkout during library development:
+    # repository: "file://../../argocd-app-loader"
 ```
 
 Run `helm dependency update`.
@@ -72,7 +76,7 @@ Run `helm dependency update`.
 
 ```yaml
 # templates/render.yaml
-{{- include "argocd-apps.loader" . -}}
+{{- include "argocd-app-loader.loader" . -}}
 ```
 
 That's the entire integration. Everything else is your data on disk.
@@ -182,10 +186,10 @@ mechanism.
 ### App toggles (`.Values.apps`)
 
 Map of `<app-name>: bool`. Default behavior requires explicit `true`. Set
-`.Values.argocdApps.requireToggle: false` to flip this so missing entries
-default to enabled.
+`.Values.argocdAppLoader.requireToggle: false` to flip this so missing
+entries default to enabled.
 
-### Loader configuration (`.Values.argocdApps`)
+### Loader configuration (`.Values.argocdAppLoader`)
 
 | Key | Default | Notes |
 |---|---|---|
@@ -200,19 +204,20 @@ from one of:
 - **OCI registry** (recommended):
   ```yaml
   dependencies:
-    - name: argocd-apps
-      version: "0.1.0"
+    - name: argocd-app-loader
+      version: "0.1.1"
       repository: "oci://ghcr.io/<owner>/charts"
   ```
-  Publish from CI with `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`.
-  Argo CD supports OCI Helm repos natively.
+  Publish from CI with
+  `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`. Argo CD supports
+  OCI Helm repos natively.
 
 - **HTTPS Helm repo** (e.g. GitHub Pages):
   ```yaml
   dependencies:
-    - name: argocd-apps
-      version: "0.1.0"
-      repository: "https://<owner>.github.io/argocd-apps"
+    - name: argocd-app-loader
+      version: "0.1.1"
+      repository: "https://<owner>.github.io/argocd-app-loader"
   ```
   Requires a CI workflow that packages the chart and updates `index.yaml`
   on the gh-pages branch.
