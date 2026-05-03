@@ -61,12 +61,16 @@ spec:
     path: {{ $appPath }}
     helm:
       releaseName: {{ $releaseName }}
-      # Cascade cluster-wide globals into the wrapper chart's release.
-      # Helm's subchart `global:` propagation forwards these to the upstream
-      # chart automatically, so .Values.global resolves at every layer.
+      # Per-source value handling:
+      #   - .wrapperValues: the wrapper's own values.yaml, already tpl-rendered
+      #     against the consumer chart context by the loader so cross-cutting
+      #     references like {{ .Values.global.domain }} resolve.
+      #   - global: cluster globals, recursively overwritten on top so cluster
+      #     identity always wins over per-app declarations.
+      # Both go through valuesObject so we deliver structured YAML rather than
+      # a string blob — easier for ArgoCD to diff and for humans to read.
       valuesObject:
-        global:
-{{ toYaml .global | indent 10 }}
+{{ toYaml (mustMergeOverwrite (deepCopy (default dict .wrapperValues)) (dict "global" .global)) | indent 8 }}
       {{- with .appMeta.helm }}
       {{- toYaml . | nindent 6 }}
       {{- end }}

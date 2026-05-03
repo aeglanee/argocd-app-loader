@@ -47,16 +47,34 @@
   {{- if $enabled }}
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
-    {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict }}
+    {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict -}}
+    {{- /*
+      Read the wrapper's values.yaml, tpl-render it against the consumer
+      chart context (so {{ .Values.global.* }} resolves), and parse to YAML.
+      The rendered values are merged with the cascaded global block and
+      injected into the emitted Application via helm.valuesObject — this is
+      the only way to get tpl semantics on values that feed an upstream
+      subchart, since Helm itself doesn't tpl values.yaml.
+    */ -}}
+    {{- $valuesPath := printf "%s/%s/%s/values.yaml" $appsRoot $group $name -}}
+    {{- $rawValues := $.Files.Get $valuesPath -}}
+    {{- $wrapperValues := dict -}}
+    {{- if $rawValues -}}
+      {{- $rendered := tpl $rawValues $ -}}
+      {{- if $rendered -}}
+        {{- $wrapperValues = fromYaml $rendered | default dict -}}
+      {{- end -}}
+    {{- end }}
 ---
 {{ include "argocd-app-loader.application" (dict
-    "name"      $name
-    "group"     $group
-    "appMeta"   $appMeta
-    "groupMeta" $groupMeta
-    "global"    $.Values.global
-    "Values"    $.Values
-    "Root"      $
+    "name"          $name
+    "group"         $group
+    "appMeta"       $appMeta
+    "groupMeta"     $groupMeta
+    "wrapperValues" $wrapperValues
+    "global"        $.Values.global
+    "Values"        $.Values
+    "Root"          $
 ) }}
   {{- end }}
 {{- end }}

@@ -8,8 +8,8 @@ description: |
   by argoproj/argo-helm/charts/argocd-apps; the differentiator is filesystem
   discovery instead of a flat values map.
 type: library
-version: 0.1.2
-appVersion: "0.1.2"
+version: 0.2.0
+appVersion: "0.2.0"
 home: https://github.com/aeglanee/argocd-app-loader
 sources:
   - https://github.com/aeglanee/argocd-app-loader

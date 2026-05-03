@@ -38,9 +38,14 @@ apps/
 - Auto-derives the project name from the group folder, the `path:` from the
   app folder, and (when configured) the repo URL from a single global
   `useLocalGit` toggle.
-- Injects `.Values.global` into every emitted Application via
-  `helm.valuesObject`, so cluster-wide settings cascade into every wrapper
-  release and into Helm's subchart `global:` propagation.
+- **Tpl-renders each wrapper's `values.yaml`** against the consumer chart
+  context, so `{{ .Values.global.* }}` references inside per-app values
+  resolve correctly. Helm itself does not tpl values files; this is the
+  loader's job.
+- Merges the rendered wrapper values with `.Values.global` (cluster globals
+  recursively overwrite on top) and injects everything via
+  `helm.valuesObject`. Globals propagate further through Helm's subchart
+  `global:` mechanism, so they reach upstream subcharts automatically.
 
 The result: adding an app means creating a folder. No central registry.
 
@@ -64,7 +69,7 @@ type: application
 version: 0.1.0
 dependencies:
   - name: argocd-app-loader
-    version: "0.1.2"
+    version: "0.2.0"
     repository: "oci://ghcr.io/aeglanee/charts"
     # Or, for a local checkout during library development:
     # repository: "file://../../argocd-app-loader"
@@ -217,7 +222,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.1.2"
+      version: "0.2.0"
       repository: "oci://ghcr.io/<owner>/charts"
   ```
   Publish from CI with
@@ -228,7 +233,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.1.2"
+      version: "0.2.0"
       repository: "https://<owner>.github.io/argocd-app-loader"
   ```
   Requires a CI workflow that packages the chart and updates `index.yaml`
