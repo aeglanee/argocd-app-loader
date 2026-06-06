@@ -35,6 +35,21 @@
 
 {{- /* Emit one Application per discovered app.yaml */ -}}
 {{- $appGlob := printf "%s/*/*/app.yaml" $appsRoot -}}
+{{- /*
+  Guard: app folder names must be unique ACROSS groups. The toggle map and the
+  default release/path are keyed by the bare app name, so two apps sharing a
+  name in different groups would silently collide on one toggle. Fail loudly.
+*/ -}}
+{{- $seenNames := dict -}}
+{{- range $path, $_ := .Files.Glob $appGlob -}}
+  {{- $p := splitList "/" $path -}}
+  {{- $g := index $p 1 -}}
+  {{- $n := index $p 2 -}}
+  {{- if hasKey $seenNames $n -}}
+    {{- fail (printf "argocd-app-loader: duplicate app name %q in groups %q and %q — app folder names must be unique across groups" $n (index $seenNames $n) $g) -}}
+  {{- end -}}
+  {{- $_ := set $seenNames $n $g -}}
+{{- end -}}
 {{- range $path, $_ := .Files.Glob $appGlob }}
   {{- $parts := splitList "/" $path -}}
   {{- $group := index $parts 1 -}}

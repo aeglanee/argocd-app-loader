@@ -150,6 +150,19 @@ through. Common fields:
 | `helm` | no | – | Extra `helm` block fields merged into the auto-built source |
 | `annotations`, `labels`, `finalizers`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through |
 
+> **Caveat — `sources` bypasses the cluster cascade.** The `.Values.cluster`
+> injection + tpl-rendered wrapper values happen only on the auto-built
+> single-`source` path. If you declare `sources:` (multi-source), they're emitted
+> verbatim and you must wire `helm.valuesObject` (incl. `cluster:`) into each
+> source yourself. A single-source wrapper with multiple `Chart.yaml`
+> dependencies covers most "combine charts" needs without this. If a genuine
+> multi-source need arises, the loader can be extended to inject the cascade into
+> each helm source.
+
+> **App folder names must be unique across groups.** Toggles and the default
+> release/path are keyed by the bare app name; the loader **fails loudly** if two
+> groups contain an app with the same folder name.
+
 Default sync policy when `syncPolicy` is not declared:
 
 ```yaml
