@@ -14,10 +14,10 @@
   Conventions consumed:
     apps/<group>/_group.yaml             AppProject metadata
     apps/<group>/<name>/app.yaml         Application metadata
-    .Values.global                       Cluster-wide globals (cascaded into apps)
-    .Values.global.apps.<name>           Boolean on/off toggle for each app
+    .Values.cluster                       Cluster-wide globals (cascaded into apps)
+    .Values.cluster.apps.<name>           Boolean on/off toggle for each app
 
-  The toggle map lives under .Values.global.apps so it cascades into every
+  The toggle map lives under .Values.cluster.apps so it cascades into every
   wrapper release alongside the rest of global.* — wrappers can branch on
   whether peer apps are enabled (e.g. enable OIDC only if authentik is on).
 
@@ -31,7 +31,7 @@
 {{- $cfg := default dict .Values.argocdAppLoader -}}
 {{- $appsRoot := default "apps" $cfg.appsRoot -}}
 {{- $requireToggle := default true $cfg.requireToggle -}}
-{{- $toggles := default dict .Values.global.apps -}}
+{{- $toggles := default dict .Values.cluster.apps -}}
 
 {{- /* Emit one Application per discovered app.yaml */ -}}
 {{- $appGlob := printf "%s/*/*/app.yaml" $appsRoot -}}
@@ -85,7 +85,7 @@
     "appMeta"       $appMeta
     "groupMeta"     $groupMeta
     "wrapperValues" $wrapperValues
-    "global"        $.Values.global
+    "cluster"        $.Values.cluster
     "Values"        $.Values
     "Root"          $
 ) }}
@@ -101,7 +101,7 @@
 {{ include "argocd-app-loader.appproject" (dict
     "name"   $group
     "meta"   $meta
-    "global" $.Values.global
+    "cluster" $.Values.cluster
     "Values" $.Values
     "Root"   $
 ) }}

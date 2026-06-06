@@ -9,15 +9,15 @@
     group     : group folder name (also default project)
     appMeta   : parsed app.yaml content (may carry any Application spec field)
     groupMeta : parsed _group.yaml content (fallbacks for project/etc)
-    global    : .Values.global from the consumer chart
+    cluster   : .Values.cluster from the consumer chart
     Values    : full consumer .Values (so tpl works against it)
 */ -}}
 {{- define "argocd-app-loader.application" -}}
-{{- $defaultRepo := ternary .global.localGitRepo .global.remoteGitRepo (default false .global.useLocalGit) -}}
+{{- $defaultRepo := ternary .cluster.localGitRepo .cluster.remoteGitRepo (default false .cluster.useLocalGit) -}}
 {{- $project := .appMeta.project | default .groupMeta.project | default .group -}}
 {{- $namespace := .appMeta.namespace | default .name -}}
 {{- $releaseName := .appMeta.releaseName | default .name -}}
-{{- $base := default "" .global.repoBasePath -}}
+{{- $base := default "" .cluster.repoBasePath -}}
 {{- $appPath := .appMeta.path -}}
 {{- if not $appPath -}}
   {{- if $base -}}
@@ -30,16 +30,22 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: {{ .name }}
-  namespace: {{ default "argocd" .global.argocdNamespace }}
-  {{- with .appMeta.annotations }}
+  namespace: {{ default "argocd" .cluster.argocdNamespace }}
+  {{- /*
+    Build the annotation map: any custom annotations (tpl-rendered against the
+    consumer context), then ALWAYS set the sync-wave from .appMeta.wave so it is
+    never dropped when custom annotations are also present. `wave` is the
+    canonical ordering source; to set a custom sync-wave, use the `wave` field.
+  */ -}}
+  {{- $annotations := dict -}}
+  {{- range $k, $v := (.appMeta.annotations | default dict) -}}
+    {{- $_ := set $annotations $k (tpl (toString $v) $.Root) -}}
+  {{- end -}}
+  {{- $_ := set $annotations "argocd.argoproj.io/sync-wave" (toString (.appMeta.wave | default 0)) }}
   annotations:
-    {{- range $k, $v := . }}
-    {{ $k }}: {{ tpl (toString $v) $.Root | quote }}
+    {{- range $k, $v := $annotations }}
+    {{ $k }}: {{ $v | quote }}
     {{- end }}
-  {{- else }}
-  annotations:
-    argocd.argoproj.io/sync-wave: {{ .appMeta.wave | default 0 | quote }}
-  {{- end }}
   {{- with .appMeta.labels }}
   labels:
     {{- toYaml . | nindent 4 }}
@@ -49,7 +55,7 @@ metadata:
 spec:
   project: {{ tpl (toString $project) .Root | quote }}
   destination:
-    server: {{ default "https://kubernetes.default.svc" .global.clusterServer }}
+    server: {{ default "https://kubernetes.default.svc" .cluster.clusterServer }}
     namespace: {{ $namespace }}
   {{- with .appMeta.sources }}
   sources:
@@ -57,20 +63,27 @@ spec:
   {{- else }}
   source:
     repoURL: {{ tpl (toString (.appMeta.repoURL | default $defaultRepo)) .Root | quote }}
-    targetRevision: {{ .appMeta.targetRevision | default .global.targetRevision | default "HEAD" }}
+    targetRevision: {{ .appMeta.targetRevision | default .cluster.targetRevision | default "HEAD" }}
     path: {{ $appPath }}
     helm:
       releaseName: {{ $releaseName }}
       # Per-source value handling:
       #   - .wrapperValues: the wrapper's own values.yaml, already tpl-rendered
       #     against the consumer chart context by the loader so cross-cutting
-      #     references like {{ .Values.global.domain }} resolve.
-      #   - global: cluster globals, recursively overwritten on top so cluster
-      #     identity always wins over per-app declarations.
+      #     references like {{ .Values.cluster.domain }} resolve.
+      #   - cluster: cluster identity/config, recursively overwritten on top so
+      #     cluster identity always wins over per-app declarations. Injected
+      #     under `cluster:` (NOT `global:`) so it cascades into THIS wrapper's
+      #     own templates (as .Values.cluster.*) WITHOUT silently propagating
+      #     into upstream subcharts via Helm's global mechanism — which would
+      #     risk collisions with charts that read global.* (imageRegistry,
+      #     storageClass, imagePullSecrets, ...). To deliberately feed an
+      #     upstream chart a real Helm global, set `global:` explicitly in that
+      #     wrapper's own values.
       # Both go through valuesObject so we deliver structured YAML rather than
       # a string blob — easier for ArgoCD to diff and for humans to read.
       valuesObject:
-{{ toYaml (mustMergeOverwrite (deepCopy (default dict .wrapperValues)) (dict "global" .global)) | indent 8 }}
+{{ toYaml (mustMergeOverwrite (deepCopy (default dict .wrapperValues)) (dict "cluster" .cluster)) | indent 8 }}
       {{- with .appMeta.helm }}
       {{- toYaml . | nindent 6 }}
       {{- end }}

@@ -1,1 +1,1 @@
-message: "hello, {{ .Values.global.domain }}"
+message: "hello, {{ .Values.cluster.domain }}"

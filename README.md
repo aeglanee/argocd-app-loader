@@ -39,13 +39,18 @@ apps/
   app folder, and (when configured) the repo URL from a single global
   `useLocalGit` toggle.
 - **Tpl-renders each wrapper's `values.yaml`** against the consumer chart
-  context, so `{{ .Values.global.* }}` references inside per-app values
+  context, so `{{ .Values.cluster.* }}` references inside per-app values
   resolve correctly. Helm itself does not tpl values files; this is the
   loader's job.
-- Merges the rendered wrapper values with `.Values.global` (cluster globals
-  recursively overwrite on top) and injects everything via
-  `helm.valuesObject`. Globals propagate further through Helm's subchart
-  `global:` mechanism, so they reach upstream subcharts automatically.
+- Merges the rendered wrapper values with the cluster config under a
+  **`cluster:`** key (cluster config recursively overwrites on top) and injects
+  everything via `helm.valuesObject`. It is injected as `cluster:` — **not**
+  `global:` — deliberately: it cascades into each wrapper's own templates (as
+  `.Values.cluster.*`) but does **not** silently propagate into upstream
+  subcharts via Helm's `global:` mechanism, avoiding key collisions with charts
+  that read `global.*` (e.g. `imageRegistry`, `storageClass`). To feed an
+  upstream chart a real Helm global, set `global:` explicitly in that wrapper's
+  own values.
 
 The result: adding an app means creating a folder. No central registry.
 
@@ -90,10 +95,10 @@ That's the entire integration. Everything else is your data on disk.
 
 ```yaml
 # values.yaml
-global:
+cluster:
   domain: example.com
   remoteGitRepo: "git@github.com:example/cluster.git"
-  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:example/cluster.git"
+  localGitRepo:  "git@gitea.{{ .Values.cluster.domain }}:example/cluster.git"
   useLocalGit: false
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
@@ -135,8 +140,8 @@ through. Common fields:
 | `namespace` | no | app folder name | Application destination namespace |
 | `project` | no | group folder name | AppProject reference |
 | `releaseName` | no | app folder name | Helm release name |
-| `repoURL` | no | derived from `global.useLocalGit` | Override the source repo for this app |
-| `targetRevision` | no | `global.targetRevision` or `HEAD` | |
+| `repoURL` | no | derived from `cluster.useLocalGit` | Override the source repo for this app |
+| `targetRevision` | no | `cluster.targetRevision` or `HEAD` | |
 | `path` | no | `<repoBasePath>/apps/<group>/<name>` | Override the source path |
 | `createNamespace` | no | `false` | Adds `CreateNamespace=true` to syncOptions |
 | `syncOptions` | no | `[]` | Extra sync options |
@@ -171,7 +176,7 @@ through. Common fields:
 | `orphanedResources` | – | Warn / auto-prune |
 | `syncWindows` | – | Time-based sync controls |
 
-### Cluster-wide globals (`.Values.global`)
+### Cluster-wide config (`.Values.cluster`)
 
 Recognised by the loader:
 
@@ -184,22 +189,23 @@ Recognised by the loader:
 | `targetRevision` | Default revision for Applications (default `HEAD`) |
 | `repoBasePath` | Path prefix for the auto-built `path:` — set when the consumer chart is not at the repo root (default empty) |
 
-Everything else under `global:` is forwarded into each wrapper release as
-`.Values.global.*` and propagates further down via Helm's subchart `global:`
-mechanism.
+Everything else under `cluster:` is forwarded into each wrapper release as
+`.Values.cluster.*`. It is injected under a `cluster:` key (not `global:`), so it
+reaches each wrapper's own templates but is **not** auto-propagated into upstream
+subcharts (no collisions with charts that read `global.*`).
 
-### App toggles (`.Values.global.apps`)
+### App toggles (`.Values.cluster.apps`)
 
-Map of `<app-name>: bool`, declared **inside `global:`** so it cascades
+Map of `<app-name>: bool`, declared **inside `cluster:`** so it cascades
 into every wrapper release alongside the rest of the globals. Wrappers
 can branch on whether peer apps are enabled — e.g. enable an OIDC
-provider in chart X only if `global.apps.authentik` is true. Default
+provider in chart X only if `cluster.apps.authentik` is true. Default
 behavior requires explicit `true`; set
 `.Values.argocdAppLoader.requireToggle: false` to flip this so missing
 entries default to enabled.
 
 ```yaml
-global:
+cluster:
   apps:
     cilium: true
     authentik: true

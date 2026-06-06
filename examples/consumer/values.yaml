@@ -1,12 +1,14 @@
-global:
+cluster:
   domain: example.com
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
   targetRevision: HEAD
   useLocalGit: false
   remoteGitRepo: "git@github.com:example/cluster.git"
-  localGitRepo:  "git@gitea.{{ .Values.global.domain }}:example/cluster.git"
+  localGitRepo:  "git@gitea.{{ .Values.cluster.domain }}:example/cluster.git"
   repoBasePath: examples/consumer
 
-apps:
-  hello: true
+  # App on/off toggles live under cluster.apps so they cascade into every
+  # wrapper release (wrappers can branch on peer-app toggles).
+  apps:
+    hello: true

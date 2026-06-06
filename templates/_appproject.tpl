@@ -7,7 +7,7 @@
   Expected input dict keys:
     name   : project name (= group folder name by convention)
     meta   : parsed _group.yaml content (may carry any AppProject spec field)
-    global : .Values.global from the consumer chart
+    cluster : .Values.cluster from the consumer chart
     Values : full consumer .Values (so tpl works against it)
 */ -}}
 {{- define "argocd-app-loader.appproject" -}}
@@ -15,7 +15,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
   name: {{ .name }}
-  namespace: {{ default "argocd" .global.argocdNamespace }}
+  namespace: {{ default "argocd" .cluster.argocdNamespace }}
   {{- with .meta.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
