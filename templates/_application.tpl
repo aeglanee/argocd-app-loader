@@ -65,6 +65,9 @@ spec:
     `chart:` → A, everything else → B.
   */ -}}
   {{- $c := .appMeta.chart -}}
+  {{- /* source A = the UPSTREAM chart's values ONLY. The cluster cascade is NOT injected here:
+         charts with a strict values.schema.json (additionalProperties:false, e.g. cert-manager)
+         reject the unknown `cluster:` key. cluster goes to source B (the local chart). */ -}}
   {{- $chartValues := default dict (get (default dict .wrapperValues) "chart") -}}
   {{- $localValues := omit (default dict .wrapperValues) "chart" -}}
   {{- $repoA := "" -}}
@@ -93,7 +96,7 @@ spec:
       helm:
         releaseName: {{ $releaseName }}
         valuesObject:
-{{ toYaml (mustMergeOverwrite (deepCopy $chartValues) (dict "cluster" .cluster)) | indent 10 }}
+{{ toYaml $chartValues | indent 10 }}
         {{- with .appMeta.helm }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
