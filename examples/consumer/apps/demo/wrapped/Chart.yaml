@@ -1,0 +1,5 @@
+# Local chart — NO dependencies. The upstream chart is app.yaml's `chart:` ref (source A).
+apiVersion: v2
+name: wrapped
+type: application
+version: 0.1.0

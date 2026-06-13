@@ -1,0 +1,5 @@
+chart:                                  # → source A (upstream podinfo)
+  replicaCount: 2
+  ui:
+    message: "from {{ .Values.cluster.domain }}"
+localGreeting: "hi-from-{{ .Values.cluster.domain }}"   # → source B (local chart)

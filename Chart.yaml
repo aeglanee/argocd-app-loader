@@ -8,8 +8,8 @@ description: |
   subcharts). Style influenced by argoproj/argo-helm/charts/argocd-apps; the
   differentiator is filesystem discovery instead of a flat values map.
 type: library
-version: 0.4.0
-appVersion: "0.4.0"
+version: 0.5.0
+appVersion: "0.5.0"
 home: https://github.com/aeglanee/argocd-app-loader
 sources:
   - https://github.com/aeglanee/argocd-app-loader

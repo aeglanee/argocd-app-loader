@@ -1,0 +1,7 @@
+wave: 5
+namespace: wrapped
+createNamespace: true
+chart:
+  name: podinfo
+  version: "6.7.0"
+  oci: ghcr.io/stefanprodan/charts

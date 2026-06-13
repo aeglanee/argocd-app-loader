@@ -57,9 +57,47 @@ spec:
   destination:
     server: {{ default "https://kubernetes.default.svc" .cluster.clusterServer }}
     namespace: {{ $namespace }}
-  {{- with .appMeta.sources }}
+  {{- if .appMeta.chart }}
+  {{- /*
+    v2 multisource — the upstream chart is source A (repoURL computed from chart.oci|.http +
+    useLocalRegistry + cluster.ociRepos), and the app dir's own Chart.yaml/templates (if present,
+    with NO dependency on this upstream) is source B, the local chart. Values split: wrapperValues
+    `chart:` → A, everything else → B.
+  */ -}}
+  {{- $c := .appMeta.chart -}}
+  {{- $chartValues := default dict (get (default dict .wrapperValues) "chart") -}}
+  {{- $localValues := omit (default dict .wrapperValues) "chart" -}}
+  {{- $repoA := "" -}}
+  {{- if $c.oci -}}
+    {{- $segs := splitList "/" (toString $c.oci) -}}
+    {{- $proxy := index (default dict .cluster.ociRepos) (first $segs) -}}
+    {{- $repoA = ternary (printf "oci://harbor.%s/%s/%s" .cluster.domain $proxy (join "/" (rest $segs))) (printf "oci://%s" (toString $c.oci)) (default false .cluster.useLocalRegistry) -}}
+  {{- else -}}
+    {{- $repoA = toString $c.http -}}
+  {{- end }}
   sources:
-    {{- toYaml . | nindent 4 }}
+    - repoURL: {{ tpl $repoA .Root | quote }}
+      chart: {{ $c.name | quote }}
+      targetRevision: {{ toString $c.version | quote }}
+      helm:
+        releaseName: {{ $releaseName }}
+        valuesObject:
+{{ toYaml (mustMergeOverwrite (deepCopy $chartValues) (dict "cluster" .cluster)) | indent 10 }}
+        {{- with .appMeta.helm }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    {{- if .hasLocalChart }}
+    - repoURL: {{ tpl (toString $defaultRepo) .Root | quote }}
+      targetRevision: {{ .appMeta.targetRevision | default .cluster.targetRevision | default "HEAD" }}
+      path: {{ $appPath }}
+      helm:
+        releaseName: {{ $releaseName }}
+        valuesObject:
+{{ toYaml (mustMergeOverwrite (deepCopy $localValues) (dict "cluster" .cluster)) | indent 10 }}
+    {{- end }}
+  {{- else if .appMeta.sources }}
+  sources:
+    {{- toYaml .appMeta.sources | nindent 4 }}
   {{- else }}
   source:
     repoURL: {{ tpl (toString (.appMeta.repoURL | default $defaultRepo)) .Root | quote }}

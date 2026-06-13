@@ -61,6 +61,8 @@
   {{- end -}}
   {{- if $enabled }}
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
+    {{- /* v2: does the app dir carry its own local chart (Chart.yaml + templates/)? → source B */ -}}
+    {{- $hasLocalChart := ne ($.Files.Get (printf "%s/%s/%s/Chart.yaml" $appsRoot $group $name)) "" -}}
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
     {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict -}}
     {{- /*
@@ -98,6 +100,7 @@
     "name"          $name
     "group"         $group
     "appMeta"       $appMeta
+    "hasLocalChart" $hasLocalChart
     "groupMeta"     $groupMeta
     "wrapperValues" $wrapperValues
     "cluster"        $.Values.cluster

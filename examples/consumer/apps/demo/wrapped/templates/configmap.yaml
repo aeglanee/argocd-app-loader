@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wrapped-local
+  namespace: {{ .Values.cluster.argocdNamespace }}
+data:
+  domain: {{ .Values.cluster.domain | quote }}
+  greeting: {{ .Values.localGreeting | quote }}
