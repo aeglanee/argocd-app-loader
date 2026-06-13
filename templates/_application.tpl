@@ -75,7 +75,16 @@ spec:
            with oci:// ArgoCD ignores `chart` and mis-resolves <repoURL>:<version>. */ -}}
     {{- $repoA = ternary (printf "harbor.%s/%s/%s" .cluster.domain $proxy (join "/" (rest $segs))) (toString $c.oci) (default false .cluster.useLocalRegistry) -}}
   {{- else -}}
-    {{- $repoA = toString $c.http -}}
+    {{- /* HTTP Helm repo. Public: ArgoCD reads index.yaml over HTTP directly. Local: route
+           through the transform shim behind Harbor — a SCHEME-LESS OCI repoURL
+           harbor/<shimProxy>/<http-repo-host+path>; ArgoCD appends the chart name. */ -}}
+    {{- if default false .cluster.useLocalRegistry -}}
+      {{- $shimProxy := required "argocd-app-loader: cluster.shimProxy must be set to route http charts through the Harbor transform shim (useLocalRegistry=true)" .cluster.shimProxy -}}
+      {{- $httpRepo := $c.http | toString | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/" -}}
+      {{- $repoA = printf "harbor.%s/%s/%s" .cluster.domain $shimProxy $httpRepo -}}
+    {{- else -}}
+      {{- $repoA = toString $c.http -}}
+    {{- end -}}
   {{- end }}
   sources:
     - repoURL: {{ tpl $repoA .Root | quote }}

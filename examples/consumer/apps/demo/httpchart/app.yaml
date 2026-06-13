@@ -1,0 +1,7 @@
+wave: 7
+namespace: httptest
+createNamespace: true
+chart:
+  name: podinfo
+  version: "6.7.0"
+  http: https://stefanprodan.github.io/podinfo
