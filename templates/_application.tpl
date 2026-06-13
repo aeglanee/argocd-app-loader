@@ -71,7 +71,9 @@ spec:
   {{- if $c.oci -}}
     {{- $segs := splitList "/" (toString $c.oci) -}}
     {{- $proxy := index (default dict .cluster.ociRepos) (first $segs) -}}
-    {{- $repoA = ternary (printf "oci://harbor.%s/%s/%s" .cluster.domain $proxy (join "/" (rest $segs))) (printf "oci://%s" (toString $c.oci)) (default false .cluster.useLocalRegistry) -}}
+    {{- /* ArgoCD OCI Helm sources take a SCHEME-LESS repoURL + the chart field;
+           with oci:// ArgoCD ignores `chart` and mis-resolves <repoURL>:<version>. */ -}}
+    {{- $repoA = ternary (printf "harbor.%s/%s/%s" .cluster.domain $proxy (join "/" (rest $segs))) (toString $c.oci) (default false .cluster.useLocalRegistry) -}}
   {{- else -}}
     {{- $repoA = toString $c.http -}}
   {{- end }}
