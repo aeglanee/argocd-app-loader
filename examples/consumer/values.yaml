@@ -8,7 +8,19 @@ cluster:
   localGitRepo:  "git@gitea.{{ .Values.cluster.domain }}:example/cluster.git"
   repoBasePath: examples/consumer
 
+  # Git airgap for git-sourced charts (chart.git). localGitBase is the in-cluster
+  # mirror base (provider-agnostic name); gitMirrors maps upstream repo → mirror
+  # repo name and ENTRY-GATES the flip (no entry = stays public even if useLocalGit).
+  localGitBase: "http://gitea.{{ .Values.cluster.domain }}/example"
+  gitMirrors:
+    github.com/rustfs/operator: rustfs-operator
+
+  # OCI proxy host for chart.oci/chart.http airgap (de-hardcoded; defaults to
+  # harbor.<domain> if unset). Point it at a different OCI proxy to swap registries.
+  localRegistryHost: "harbor.{{ .Values.cluster.domain }}"
+
   # App on/off toggles live under cluster.apps so they cascade into every
   # wrapper release (wrappers can branch on peer-app toggles).
   apps:
     hello: true
+    gitchart: true

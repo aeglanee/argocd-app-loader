@@ -143,6 +143,7 @@ through. Common fields:
 | `repoURL` | no | derived from `cluster.useLocalGit` | Override the source repo for this app |
 | `targetRevision` | no | `cluster.targetRevision` or `HEAD` | |
 | `path` | no | `<repoBasePath>/apps/<group>/<name>` | Override the source path |
+| `chart` | no | – | Upstream chart source (`oci`/`http`/`git`) → multisource Application; see **Chart source** below |
 | `createNamespace` | no | `false` | Adds `CreateNamespace=true` to syncOptions |
 | `syncOptions` | no | `[]` | Extra sync options |
 | `syncPolicy` | no | (see below) | Full override of the default policy |
@@ -162,6 +163,33 @@ through. Common fields:
 > **App folder names must be unique across groups.** Toggles and the default
 > release/path are keyed by the bare app name; the loader **fails loudly** if two
 > groups contain an app with the same folder name.
+
+#### Chart source (`chart:`) — multisource
+
+Instead of `repoURL`/`path`, an app may declare an upstream `chart:` block. The
+loader emits a **2-source** Application: source A = the upstream chart, source B =
+the app dir's own `Chart.yaml`/`templates/` (if present — for Ingress/ESO/CRs the
+upstream can't express). Wrapper values split: the `chart:` subtree → A, everything
+else (plus the `cluster` cascade) → B.
+
+Three mutually-exclusive source forms:
+
+| Form | Fields | Public `repoURL` | Local `repoURL` (airgap) |
+|---|---|---|---|
+| `oci` | `oci` (scheme-less host/path), `name`, `version` | `oci://<oci>` | `<localRegistryHost>/<ociRepos[host]>/<rest>` |
+| `http` | `http` (Helm repo URL), `name`, `version` | `<http>` | `<localRegistryHost>/<shimProxy>/<repo-host+path>` |
+| `git` | `git` (scheme-less repo), `path`, `revision` | `https://<git>` | `<localGitBase>/<gitMirrors[git]>` |
+
+The `oci`/`http` local rewrite is gated by **`useLocalRegistry` + a `ociRepos` entry**;
+the `git` local rewrite by **`useLocalGit` + a `gitMirrors` entry**. A repo absent from
+its map stays public even with the toggle on — the airgap **cold-start rule**: deps
+start public, flip to local only once the mirror/proxy exists.
+
+```yaml
+chart: { oci: ghcr.io/aeglanee/charts, name: myapp, version: "1.2.3" }   # OCI registry
+chart: { http: https://charts.example.com, name: myapp, version: "1.2.3" } # HTTP Helm repo
+chart: { git: github.com/acme/operator, path: deploy/chart, revision: v0.3.1 } # chart inside a git repo
+```
 
 Default sync policy when `syncPolicy` is not declared:
 
@@ -201,6 +229,12 @@ Recognised by the loader:
 | `argocdNamespace` | Where Application/AppProject CRs live (default `argocd`) |
 | `targetRevision` | Default revision for Applications (default `HEAD`) |
 | `repoBasePath` | Path prefix for the auto-built `path:` — set when the consumer chart is not at the repo root (default empty) |
+| `useLocalRegistry` (bool) | Route `chart.oci`/`chart.http` through the OCI proxy (chart airgap) |
+| `localRegistryHost` | OCI proxy host for the local rewrite (default `harbor.<domain>`; set to swap registries) |
+| `ociRepos` (map) | `<oci-host>: <proxy-project>` — entry-gates the `chart.oci` rewrite |
+| `shimProxy` | Proxy project for the http→OCI transform shim (required with `useLocalRegistry` + `chart.http`) |
+| `gitMirrors` (map) | `<git-repo>: <mirror-repo>` — entry-gates the `chart.git` rewrite |
+| `localGitBase` | In-cluster git-mirror base for the `chart.git` local rewrite |
 
 Everything else under `cluster:` is forwarded into each wrapper release as
 `.Values.cluster.*`. It is injected under a `cluster:` key (not `global:`), so it

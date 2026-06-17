@@ -71,28 +71,51 @@ spec:
   {{- $chartValues := default dict (get (default dict .wrapperValues) "chart") -}}
   {{- $localValues := omit (default dict .wrapperValues) "chart" -}}
   {{- $repoA := "" -}}
+  {{- $isGit := false -}}
+  {{- /* localRegistryHost de-hardcodes the OCI proxy host (was a literal "harbor.<domain>").
+         Set cluster.localRegistryHost to aim the chart airgap at a different OCI proxy/registry.
+         Falls back to harbor.<domain> so existing consumers keep working unchanged. */ -}}
+  {{- $regHost := .cluster.localRegistryHost | default (printf "harbor.%s" (toString .cluster.domain)) -}}
   {{- if $c.oci -}}
     {{- $segs := splitList "/" (toString $c.oci) -}}
     {{- $proxy := index (default dict .cluster.ociRepos) (first $segs) -}}
     {{- /* ArgoCD OCI Helm sources take a SCHEME-LESS repoURL + the chart field;
            with oci:// ArgoCD ignores `chart` and mis-resolves <repoURL>:<version>. */ -}}
-    {{- $repoA = ternary (printf "harbor.%s/%s/%s" .cluster.domain $proxy (join "/" (rest $segs))) (toString $c.oci) (default false .cluster.useLocalRegistry) -}}
+    {{- $repoA = ternary (printf "%s/%s/%s" $regHost $proxy (join "/" (rest $segs))) (toString $c.oci) (default false .cluster.useLocalRegistry) -}}
+  {{- else if $c.git -}}
+    {{- $isGit = true -}}
+    {{- /* Git-sourced Helm chart: chart.git (scheme-less repo) + chart.path + chart.revision.
+           Public: clone from the upstream host over https. Local: when useLocalGit AND an entry
+           exists in cluster.gitMirrors, clone from the in-cluster mirror at <localGitBase>/<mirror>.
+           Entry-gated — a repo with no gitMirrors entry stays public even when useLocalGit=true
+           (the airgap cold-start rule, mirroring how cluster.ociRepos gates the OCI proxy). */ -}}
+    {{- $mirror := index (default dict .cluster.gitMirrors) (toString $c.git) -}}
+    {{- if and (default false .cluster.useLocalGit) $mirror -}}
+      {{- $repoA = printf "%s/%s" (required "argocd-app-loader: cluster.localGitBase must be set to resolve a git mirror (useLocalGit=true)" .cluster.localGitBase) $mirror -}}
+    {{- else -}}
+      {{- $repoA = printf "https://%s" (toString $c.git | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/") -}}
+    {{- end -}}
   {{- else -}}
     {{- /* HTTP Helm repo. Public: ArgoCD reads index.yaml over HTTP directly. Local: route
-           through the transform shim behind Harbor — a SCHEME-LESS OCI repoURL
-           harbor/<shimProxy>/<http-repo-host+path>; ArgoCD appends the chart name. */ -}}
+           through the transform shim behind the OCI proxy — a SCHEME-LESS OCI repoURL
+           <regHost>/<shimProxy>/<http-repo-host+path>; ArgoCD appends the chart name. */ -}}
     {{- if default false .cluster.useLocalRegistry -}}
-      {{- $shimProxy := required "argocd-app-loader: cluster.shimProxy must be set to route http charts through the Harbor transform shim (useLocalRegistry=true)" .cluster.shimProxy -}}
+      {{- $shimProxy := required "argocd-app-loader: cluster.shimProxy must be set to route http charts through the transform shim (useLocalRegistry=true)" .cluster.shimProxy -}}
       {{- $httpRepo := $c.http | toString | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/" -}}
-      {{- $repoA = printf "harbor.%s/%s/%s" .cluster.domain $shimProxy $httpRepo -}}
+      {{- $repoA = printf "%s/%s/%s" $regHost $shimProxy $httpRepo -}}
     {{- else -}}
       {{- $repoA = toString $c.http -}}
     {{- end -}}
   {{- end }}
   sources:
     - repoURL: {{ tpl $repoA .Root | quote }}
+      {{- if $isGit }}
+      path: {{ required "argocd-app-loader: chart.path is required for a git chart source (chart.git)" $c.path | quote }}
+      targetRevision: {{ toString (required "argocd-app-loader: chart.revision is required for a git chart source (chart.git)" $c.revision) | quote }}
+      {{- else }}
       chart: {{ $c.name | quote }}
       targetRevision: {{ toString $c.version | quote }}
+      {{- end }}
       helm:
         releaseName: {{ $releaseName }}
         valuesObject:

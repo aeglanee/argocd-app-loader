@@ -1,0 +1,12 @@
+wave: 8
+namespace: gittest
+createNamespace: true
+# Git-sourced Helm chart (a chart that lives in a git repo, not a registry).
+# Public: cloned from https://github.com/<git>. Local: when cluster.useLocalGit
+# is true AND cluster.gitMirrors has an entry for this repo, cloned from the
+# in-cluster mirror at <localGitBase>/<mirror>. Entry-gated, so no mirror = stays
+# public even with useLocalGit=true (airgap cold-start rule).
+chart:
+  git: github.com/rustfs/operator     # scheme-less upstream repo
+  path: deploy/rustfs-operator         # chart path inside the repo
+  revision: "0.0.2"                    # git tag / branch / SHA
