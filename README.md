@@ -159,6 +159,15 @@ through. Common fields:
 > dependencies covers most "combine charts" needs without this. If a genuine
 > multi-source need arises, the loader can be extended to inject the cascade into
 > each helm source.
+>
+> **One exception (since 0.7.0): `repoURL` is resolved, not copied.** Each entry's
+> `repoURL` goes through the same `gitMirrors` lookup as `chart.git`, so a
+> passthrough app can still honour the git airgap toggle instead of being pinned to
+> its public upstream forever. Everything else in the entry is still verbatim. This
+> matters for apps that are **not a Helm chart at all** — raw upstream YAML such as
+> the Gateway API CRDs, which no chart ships and which therefore can't use
+> `chart.git` (that form always emits a Helm source and requires a `Chart.yaml`).
+> A `repoURL` with no `gitMirrors` entry is returned **exactly as written**.
 
 > **App folder names must be unique across groups.** Toggles and the default
 > release/path are keyed by the bare app name; the loader **fails loudly** if two
@@ -233,8 +242,8 @@ Recognised by the loader:
 | `localRegistryHost` | OCI proxy host for the local rewrite (default `harbor.<domain>`; set to swap registries) |
 | `ociRepos` (map) | `<oci-host>: <proxy-project>` — entry-gates the `chart.oci` rewrite |
 | `shimProxy` | Proxy project for the http→OCI transform shim (required with `useLocalRegistry` + `chart.http`) |
-| `gitMirrors` (map) | `<git-repo>: <mirror-repo>` — entry-gates the `chart.git` rewrite |
-| `localGitBase` | In-cluster git-mirror base for the `chart.git` local rewrite |
+| `gitMirrors` (map) | `<git-repo>: <mirror-repo>` — entry-gates the `chart.git` **and** `sources[].repoURL` rewrites |
+| `localGitBase` | In-cluster git-mirror base for the `chart.git` / `sources[].repoURL` local rewrite |
 
 Everything else under `cluster:` is forwarded into each wrapper release as
 `.Values.cluster.*`. It is injected under a `cluster:` key (not `global:`), so it

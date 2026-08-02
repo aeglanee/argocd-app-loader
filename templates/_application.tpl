@@ -13,6 +13,8 @@
     Values    : full consumer .Values (so tpl works against it)
 */ -}}
 {{- define "argocd-app-loader.application" -}}
+{{- /* Bound once: `range` rebinds the dot, so .cluster is not reachable inside the loops below. */ -}}
+{{- $cluster := .cluster -}}
 {{- $defaultRepo := ternary .cluster.localGitRepo .cluster.remoteGitRepo (default false .cluster.useLocalGit) -}}
 {{- $project := .appMeta.project | default .groupMeta.project | default .group -}}
 {{- $namespace := .appMeta.namespace | default .name -}}
@@ -133,11 +135,24 @@ spec:
 {{ toYaml (mustMergeOverwrite (deepCopy $localValues) (dict "cluster" .cluster)) | indent 10 }}
     {{- end }}
   {{- else if .appMeta.sources }}
+  {{- /* Verbatim multi-source passthrough — for apps that are not a Helm chart at all (raw
+         upstream YAML, e.g. the Gateway API CRDs). Every field is emitted as written; the ONLY
+         thing rewritten is repoURL, so these sources honour the gitMirrors airgap toggle like
+         chart.git does instead of being permanently pinned to their public upstream. */}}
   sources:
-    {{- toYaml .appMeta.sources | nindent 4 }}
+    {{- range $src := .appMeta.sources }}
+    {{- $s := deepCopy $src -}}
+    {{- if $s.repoURL -}}
+      {{- $_ := set $s "repoURL" (include "argocd-app-loader.gitMirrorURL" (dict "url" $s.repoURL "cluster" $cluster)) -}}
+    {{- end }}
+    - {{ toYaml $s | nindent 6 | trim }}
+    {{- end }}
   {{- else }}
   source:
-    repoURL: {{ tpl (toString (.appMeta.repoURL | default $defaultRepo)) .Root | quote }}
+    {{- /* An explicit appMeta.repoURL may point at an external repo, so it goes through the
+           same gitMirrors resolution. $defaultRepo is already toggled and has no gitMirrors
+           entry, so it passes through untouched. */}}
+    repoURL: {{ tpl (include "argocd-app-loader.gitMirrorURL" (dict "url" (.appMeta.repoURL | default $defaultRepo) "cluster" $cluster)) .Root | quote }}
     targetRevision: {{ .appMeta.targetRevision | default .cluster.targetRevision | default "HEAD" }}
     path: {{ $appPath }}
     helm:
@@ -187,4 +202,29 @@ spec:
   {{- with .appMeta.revisionHistoryLimit }}
   revisionHistoryLimit: {{ . }}
   {{- end }}
+{{- end -}}
+
+{{- /*
+  argocd-app-loader.gitMirrorURL — resolve one git repoURL through cluster.gitMirrors.
+
+  The airgap rule, shared with the chart.git branch: when useLocalGit is on AND the repo has
+  an entry in cluster.gitMirrors, clone from the in-cluster mirror at <localGitBase>/<mirror>.
+  ENTRY-GATED — a repo with no entry stays public even when useLocalGit=true, which is what
+  keeps a cold-start bootstrap working (the mirror lives inside the cluster being built).
+
+  Lookup is normalised: gitMirrors keys are scheme-less (github.com/org/repo), while an
+  ArgoCD source repoURL must carry a scheme. Strip scheme, trailing slash and a .git suffix
+  before matching. Unmatched URLs are returned EXACTLY as given — never reformatted.
+
+  Input dict: url (string), cluster (.Values.cluster)
+*/ -}}
+{{- define "argocd-app-loader.gitMirrorURL" -}}
+{{- $url := toString .url -}}
+{{- $key := $url | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/" | trimSuffix ".git" -}}
+{{- $mirror := index (default dict .cluster.gitMirrors) $key -}}
+{{- if and (default false .cluster.useLocalGit) $mirror -}}
+{{- printf "%s/%s" (required "argocd-app-loader: cluster.localGitBase must be set to resolve a git mirror (useLocalGit=true)" .cluster.localGitBase) $mirror -}}
+{{- else -}}
+{{- $url -}}
+{{- end -}}
 {{- end -}}
