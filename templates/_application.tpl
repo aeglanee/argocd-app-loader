@@ -61,10 +61,10 @@ spec:
     namespace: {{ $namespace }}
   {{- if .appMeta.chart }}
   {{- /*
-    v2 multisource — the upstream chart is source A (repoURL computed from chart.oci|.http +
-    useLocalRegistry + cluster.ociRepos), and the app dir's own Chart.yaml/templates (if present,
-    with NO dependency on this upstream) is source B, the local chart. Values split: wrapperValues
-    `chart:` → A, everything else → B.
+    Multisource — the upstream chart is source A (repoURL = chart.repo resolved through
+    cluster.mirrors, see _mirror.tpl), and the app dir's own Chart.yaml/templates (if present,
+    with NO dependency on this upstream) is source B, the local chart. Values split:
+    wrapperValues `chart:` → A, everything else → B.
   */ -}}
   {{- $c := .appMeta.chart -}}
   {{- /* source A = the UPSTREAM chart's values ONLY. The cluster cascade is NOT injected here:
@@ -72,52 +72,17 @@ spec:
          reject the unknown `cluster:` key. cluster goes to source B (the local chart). */ -}}
   {{- $chartValues := default dict (get (default dict .wrapperValues) "chart") -}}
   {{- $localValues := omit (default dict .wrapperValues) "chart" -}}
-  {{- $repoA := "" -}}
-  {{- $isGit := false -}}
-  {{- /* localRegistryHost de-hardcodes the OCI proxy host (was a literal "harbor.<domain>").
-         Set cluster.localRegistryHost to aim the chart airgap at a different OCI proxy/registry.
-         Falls back to harbor.<domain> so existing consumers keep working unchanged. */ -}}
-  {{- $regHost := .cluster.localRegistryHost | default (printf "harbor.%s" (toString .cluster.domain)) -}}
-  {{- if $c.oci -}}
-    {{- $segs := splitList "/" (toString $c.oci) -}}
-    {{- $proxy := index (default dict .cluster.ociRepos) (first $segs) -}}
-    {{- /* ArgoCD OCI Helm sources take a SCHEME-LESS repoURL + the chart field;
-           with oci:// ArgoCD ignores `chart` and mis-resolves <repoURL>:<version>. */ -}}
-    {{- $repoA = ternary (printf "%s/%s/%s" $regHost $proxy (join "/" (rest $segs))) (toString $c.oci) (default false .cluster.useLocalRegistry) -}}
-  {{- else if $c.git -}}
-    {{- $isGit = true -}}
-    {{- /* Git-sourced Helm chart: chart.git (scheme-less repo) + chart.path + chart.revision.
-           Public: clone from the upstream host over https. Local: when useLocalGit AND an entry
-           exists in cluster.gitMirrors, clone from the in-cluster mirror at <localGitBase>/<mirror>.
-           Entry-gated — a repo with no gitMirrors entry stays public even when useLocalGit=true
-           (the airgap cold-start rule, mirroring how cluster.ociRepos gates the OCI proxy). */ -}}
-    {{- $mirror := index (default dict .cluster.gitMirrors) (toString $c.git) -}}
-    {{- if and (default false .cluster.useLocalGit) $mirror -}}
-      {{- $repoA = printf "%s/%s" (required "argocd-app-loader: cluster.localGitBase must be set to resolve a git mirror (useLocalGit=true)" .cluster.localGitBase) $mirror -}}
-    {{- else -}}
-      {{- $repoA = printf "https://%s" (toString $c.git | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/") -}}
-    {{- end -}}
-  {{- else -}}
-    {{- /* HTTP Helm repo. Public: ArgoCD reads index.yaml over HTTP directly. Local: route
-           through the transform shim behind the OCI proxy — a SCHEME-LESS OCI repoURL
-           <regHost>/<shimProxy>/<http-repo-host+path>; ArgoCD appends the chart name. */ -}}
-    {{- if default false .cluster.useLocalRegistry -}}
-      {{- $shimProxy := required "argocd-app-loader: cluster.shimProxy must be set to route http charts through the transform shim (useLocalRegistry=true)" .cluster.shimProxy -}}
-      {{- $httpRepo := $c.http | toString | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/" -}}
-      {{- $repoA = printf "%s/%s/%s" $regHost $shimProxy $httpRepo -}}
-    {{- else -}}
-      {{- $repoA = toString $c.http -}}
-    {{- end -}}
-  {{- end }}
+  {{- $kind := include "argocd-app-loader.chartKind" $c -}}
+  {{- $mirror := eq (include "argocd-app-loader.mirrorFlag" $c.mirror) "true" -}}
+  {{- $version := toString (required (printf "argocd-app-loader: chart.version is required for app %s (git: the tag/ref)" .name) $c.version) }}
   sources:
-    - repoURL: {{ tpl $repoA .Root | quote }}
-      {{- if $isGit }}
-      path: {{ required "argocd-app-loader: chart.path is required for a git chart source (chart.git)" $c.path | quote }}
-      targetRevision: {{ toString (required "argocd-app-loader: chart.revision is required for a git chart source (chart.git)" $c.revision) | quote }}
+    - repoURL: {{ include "argocd-app-loader.mirrorURL" (dict "url" $c.repo "kind" $kind "mirror" $mirror "cluster" .cluster "Root" .Root) | quote }}
+      {{- if eq $kind "git" }}
+      path: {{ $c.path | quote }}
       {{- else }}
       chart: {{ $c.name | quote }}
-      targetRevision: {{ toString $c.version | quote }}
       {{- end }}
+      targetRevision: {{ $version | quote }}
       helm:
         releaseName: {{ $releaseName }}
         valuesObject:
@@ -137,22 +102,32 @@ spec:
   {{- else if .appMeta.sources }}
   {{- /* Verbatim multi-source passthrough — for apps that are not a Helm chart at all (raw
          upstream YAML, e.g. the Gateway API CRDs). Every field is emitted as written; the ONLY
-         thing rewritten is repoURL, so these sources honour the gitMirrors airgap toggle like
-         chart.git does instead of being permanently pinned to their public upstream. */}}
+         thing rewritten is repoURL (through cluster.mirrors, like a chart.repo), and a per-source
+         `mirror: false` opt-out is consumed (not emitted). A source with `chart:` is a Helm
+         source (oci:// or scheme-less = OCI, else an HTTP repo); anything else is git. */}}
   sources:
     {{- range $src := .appMeta.sources }}
-    {{- $s := deepCopy $src -}}
+    {{- $s := omit (deepCopy $src) "mirror" -}}
     {{- if $s.repoURL -}}
-      {{- $_ := set $s "repoURL" (include "argocd-app-loader.gitMirrorURL" (dict "url" $s.repoURL "cluster" $cluster)) -}}
+      {{- $u := toString $s.repoURL -}}
+      {{- $k := "git" -}}
+      {{- if $s.chart -}}
+        {{- $k = ternary "oci" "helm" (or (hasPrefix "oci://" $u) (not (regexMatch "^https?://" $u))) -}}
+      {{- end -}}
+      {{- $_ := set $s "repoURL" (include "argocd-app-loader.mirrorURL" (dict "url" $u "kind" $k "mirror" (eq (include "argocd-app-loader.mirrorFlag" $src.mirror) "true") "cluster" $cluster "Root" $.Root)) -}}
     {{- end }}
     - {{ toYaml $s | nindent 6 | trim }}
     {{- end }}
   {{- else }}
   source:
-    {{- /* An explicit appMeta.repoURL may point at an external repo, so it goes through the
-           same gitMirrors resolution. $defaultRepo is already toggled and has no gitMirrors
-           entry, so it passes through untouched. */}}
-    repoURL: {{ tpl (include "argocd-app-loader.gitMirrorURL" (dict "url" (.appMeta.repoURL | default $defaultRepo) "cluster" $cluster)) .Root | quote }}
+    {{- /* An explicit appMeta.repoURL may point at an external repo, so it goes through
+           cluster.mirrors as a git source. The default (this repo, via useLocalGit) is already
+           toggled and is emitted as-is. */}}
+    {{- if .appMeta.repoURL }}
+    repoURL: {{ include "argocd-app-loader.mirrorURL" (dict "url" .appMeta.repoURL "kind" "git" "mirror" (eq (include "argocd-app-loader.mirrorFlag" .appMeta.mirror) "true") "cluster" $cluster "Root" .Root) | quote }}
+    {{- else }}
+    repoURL: {{ tpl (toString $defaultRepo) .Root | quote }}
+    {{- end }}
     targetRevision: {{ .appMeta.targetRevision | default .cluster.targetRevision | default "HEAD" }}
     path: {{ $appPath }}
     helm:
@@ -202,29 +177,4 @@ spec:
   {{- with .appMeta.revisionHistoryLimit }}
   revisionHistoryLimit: {{ . }}
   {{- end }}
-{{- end -}}
-
-{{- /*
-  argocd-app-loader.gitMirrorURL — resolve one git repoURL through cluster.gitMirrors.
-
-  The airgap rule, shared with the chart.git branch: when useLocalGit is on AND the repo has
-  an entry in cluster.gitMirrors, clone from the in-cluster mirror at <localGitBase>/<mirror>.
-  ENTRY-GATED — a repo with no entry stays public even when useLocalGit=true, which is what
-  keeps a cold-start bootstrap working (the mirror lives inside the cluster being built).
-
-  Lookup is normalised: gitMirrors keys are scheme-less (github.com/org/repo), while an
-  ArgoCD source repoURL must carry a scheme. Strip scheme, trailing slash and a .git suffix
-  before matching. Unmatched URLs are returned EXACTLY as given — never reformatted.
-
-  Input dict: url (string), cluster (.Values.cluster)
-*/ -}}
-{{- define "argocd-app-loader.gitMirrorURL" -}}
-{{- $url := toString .url -}}
-{{- $key := $url | trimPrefix "https://" | trimPrefix "http://" | trimSuffix "/" | trimSuffix ".git" -}}
-{{- $mirror := index (default dict .cluster.gitMirrors) $key -}}
-{{- if and (default false .cluster.useLocalGit) $mirror -}}
-{{- printf "%s/%s" (required "argocd-app-loader: cluster.localGitBase must be set to resolve a git mirror (useLocalGit=true)" .cluster.localGitBase) $mirror -}}
-{{- else -}}
-{{- $url -}}
-{{- end -}}
 {{- end -}}

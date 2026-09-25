@@ -1,12 +1,11 @@
 wave: 8
 namespace: gittest
 createNamespace: true
-# Git-sourced Helm chart (a chart that lives in a git repo, not a registry).
-# Public: cloned from https://github.com/<git>. Local: when cluster.useLocalGit
-# is true AND cluster.gitMirrors has an entry for this repo, cloned from the
-# in-cluster mirror at <localGitBase>/<mirror>. Entry-gated, so no mirror = stays
-# public even with useLocalGit=true (airgap cold-start rule).
+# Git-sourced Helm chart (a chart that lives in a git repo, not a registry): having a
+# chart.path makes it a git chart, and chart.version is the git tag / branch / SHA.
+# Mirrored to <forgejo.base>/<repo> only when via.forgejo is enabled AND the table has an
+# entry for this repo — otherwise cloned from the public URL as written.
 chart:
-  git: github.com/rustfs/operator     # scheme-less upstream repo
-  path: deploy/rustfs-operator         # chart path inside the repo
-  revision: "0.0.2"                    # git tag / branch / SHA
+  repo: https://github.com/rustfs/operator
+  path: deploy/rustfs-operator
+  version: "0.0.2"

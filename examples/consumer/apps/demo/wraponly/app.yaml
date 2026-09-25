@@ -4,4 +4,4 @@ createNamespace: true
 chart:
   name: podinfo
   version: "6.7.0"
-  oci: ghcr.io/stefanprodan/charts
+  repo: oci://ghcr.io/stefanprodan/charts

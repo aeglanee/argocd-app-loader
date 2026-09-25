@@ -30,8 +30,15 @@
 {{- define "argocd-app-loader.loader" -}}
 {{- $cfg := default dict .Values.argocdAppLoader -}}
 {{- $appsRoot := default "apps" $cfg.appsRoot -}}
-{{- $requireToggle := default true $cfg.requireToggle -}}
+{{- /* NOT `default true`: sprig's default treats an explicit false as empty → always true. */ -}}
+{{- $requireToggle := ternary $cfg.requireToggle true (kindIs "bool" $cfg.requireToggle) -}}
 {{- $toggles := default dict .Values.cluster.apps -}}
+{{- /* Fail loudly on the pre-0.8 airgap keys rather than silently ignoring them. */ -}}
+{{- range $old := list "useLocalRegistry" "ociRepos" "shimProxy" "localRegistryHost" "gitMirrors" "localGitBase" -}}
+  {{- if hasKey (default dict $.Values.cluster) $old -}}
+    {{- fail (printf "argocd-app-loader: cluster.%s was removed in 0.8 — chart/git mirroring is now cluster.mirrors {via, table} (see README)" $old) -}}
+  {{- end -}}
+{{- end -}}
 
 {{- /* Emit one Application per discovered app.yaml */ -}}
 {{- $appGlob := printf "%s/*/*/app.yaml" $appsRoot -}}

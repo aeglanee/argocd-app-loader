@@ -8,19 +8,24 @@ cluster:
   localGitRepo:  "git@gitea.{{ .Values.cluster.domain }}:example/cluster.git"
   repoBasePath: examples/consumer
 
-  # Git airgap for git-sourced charts (chart.git). localGitBase is the in-cluster
-  # mirror base (provider-agnostic name); gitMirrors maps upstream repo → mirror
-  # repo name and ENTRY-GATES the flip (no entry = stays public even if useLocalGit).
-  localGitBase: "http://gitea.{{ .Values.cluster.domain }}/example"
-  gitMirrors:
-    github.com/rustfs/operator: rustfs-operator
-
-  # OCI proxy host for chart.oci/chart.http airgap (de-hardcoded; defaults to
-  # harbor.<domain> if unset). Point it at a different OCI proxy to swap registries.
-  localRegistryHost: "harbor.{{ .Values.cluster.domain }}"
+  # Chart/git MIRRORS. Apps always declare their real upstream (chart.repo); this block
+  # decides whether a source is pulled through a local mirror instead. Private only when
+  # the method is enabled AND a table key matches AND the app has not set mirror: false.
+  mirrors:
+    via:
+      harbor:  { enabled: false, host: "harbor.{{ .Values.cluster.domain }}" }   # OCI proxy-cache
+      shim:    { enabled: false, project: shim-proxy }                         # HTTP repo → OCI (host defaults to harbor's)
+      forgejo: { enabled: false, base: "http://gitea.{{ .Values.cluster.domain }}/example" }
+    table:     # scheme-less upstream prefix, longest match wins (whole path segments)
+      ghcr.io:                         { via: harbor, project: ghcr-proxy }
+      stefanprodan.github.io/podinfo:  { via: shim }
+      github.com/rustfs/operator:      { via: forgejo, repo: rustfs-operator }
 
   # App on/off toggles live under cluster.apps so they cascade into every
   # wrapper release (wrappers can branch on peer-app toggles).
   apps:
     hello: true
     gitchart: true
+    httpchart: true
+    wraponly: true
+    wrapped: true
