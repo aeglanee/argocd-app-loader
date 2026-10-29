@@ -14,7 +14,7 @@ custom resources from a **filesystem layout**. Drop it into your cluster
 
 Given a directory tree like:
 
-```
+```text
 apps/
 ├── infrastructure/
 │   ├── _group.yaml                   # AppProject metadata
@@ -169,6 +169,8 @@ through. Common fields:
 > all** — raw upstream YAML such as the Gateway API CRDs. A `repoURL` with no table
 > entry is returned **exactly as written**.
 
+<!-- -->
+
 > **App folder names must be unique across groups.** Toggles and the default
 > release/path are keyed by the bare app name; the loader **fails loudly** if two
 > groups contain an app with the same folder name.
@@ -309,23 +311,27 @@ Helm has no native git dependency mechanism, so consumers fetch the chart
 from one of:
 
 - **OCI registry** (recommended):
+
   ```yaml
   dependencies:
     - name: argocd-app-loader
       version: "0.2.0"
       repository: "oci://ghcr.io/<owner>/charts"
   ```
+
   Publish from CI with
   `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`. Argo CD supports
   OCI Helm repos natively.
 
 - **HTTPS Helm repo** (e.g. GitHub Pages):
+
   ```yaml
   dependencies:
     - name: argocd-app-loader
       version: "0.2.0"
       repository: "https://<owner>.github.io/argocd-app-loader"
   ```
+
   Requires a CI workflow that packages the chart and updates `index.yaml`
   on the gh-pages branch.
 
