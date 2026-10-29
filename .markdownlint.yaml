@@ -1,0 +1,11 @@
+---
+default: true
+
+# MD013/line-length — prose wraps at ~100; tables and code are exempt.
+MD013:
+  line_length: 120
+  tables: false
+  code_blocks: false
+
+# MD060/table-column-style — tables are kept compact, not column-aligned.
+MD060: false

@@ -1,0 +1,31 @@
+---
+# Local: `nix develop -c pre-commit install` once, then hooks run on every commit.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530 # frozen: v1.38.0
+    hooks:
+      - id: yamllint
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: cbcdc463be5464e25e3e955a511599a67b9b987f  # frozen: v0.50.0
+    hooks:
+      - id: markdownlint
+
+  - repo: local
+    hooks:
+      # yamllint's `braces: forbid` can't see Helm templates (ignored there, not YAML until
+      # rendered), so the same rule as a pattern: a `{` after `key:` or `- ` that holds `x: y`.
+      # `{{ }}`, empty `{}` and shell/CSS braces inside text blocks don't match.
+      - id: no-flow-mappings
+        name: no flow-style YAML mappings (use indentation)
+        language: pygrep
+        entry: '(:|^\s*-)\s+\{(?!\{)\s*[^{}\s#"''][^{}]*?:\s'
+        files: (\.ya?ml|\.gotmpl)$

@@ -340,6 +340,17 @@ from one of:
   The `examples/consumer/` directory in this repo uses this for its
   in-repo demo, but real deployments should use OCI or HTTPS.
 
+## Development
+
+Tools: [Helm 4](https://helm.sh/docs/intro/install/) (Argo CD 3.5+ renders with Helm 4) with the
+[helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin, and
+[pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all three.
+
+```sh
+nix develop -c pre-commit install   # once; hooks then run on every commit
+nix develop -c pre-commit run --all-files
+```
+
 ## Status
 
 Pre-1.0. The API is settling. Pin a version in your dependency.

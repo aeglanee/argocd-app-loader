@@ -1,0 +1,25 @@
+---
+extends: default
+
+ignore: |
+  # Helm templates are Go templates, not YAML, until rendered.
+  templates/
+  examples/consumer/templates/
+  examples/consumer/apps/*/*/templates/
+  charts/
+  examples/consumer/charts/
+
+rules:
+  line-length:
+    max: 160
+    allow-non-breakable-words: true
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  # Block style only: `{ a: b }` mappings are harder to read and diff. Empty `{}` stays allowed.
+  # Helm templates are ignored above; the `no-flow-mappings` pre-commit hook covers them.
+  braces:
+    forbid: non-empty
+  document-start: disable
+  truthy:
+    check-keys: false
