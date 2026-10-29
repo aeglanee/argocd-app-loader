@@ -1,5 +1,5 @@
 {
-  description = "argocd-app-loader — repo toolchain (Helm 4 + helm-unittest, pre-commit)";
+  description = "argocd-app-loader — repo toolchain (Helm 4 + helm-unittest, Task, pre-commit)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -14,6 +14,7 @@
           (wrapHelm kubernetes-helm {
             plugins = [ kubernetes-helmPlugins.helm-unittest ];
           })
+          go-task
           pre-commit
           nodejs # the markdownlint hook uses it instead of downloading a non-NixOS build
         ];

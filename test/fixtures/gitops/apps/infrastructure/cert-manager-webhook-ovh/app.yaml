@@ -1,0 +1,10 @@
+project: infrastructure
+wave: -9                 # after cert-manager (-10) — needs its CRDs/APIService
+namespace: cert-manager
+releaseName: cert-manager-webhook-ovh
+syncOptions:             # must be non-empty — loader emits syncOptions:null otherwise → CRD rejects it
+  - ServerSideApply=true
+chart:                     # OCI (upstream publishes both; OCI goes through the ghcr.io harbor mirror entry)
+  name: cert-manager-webhook-ovh
+  version: "0.9.19"
+  repo: oci://ghcr.io/aureq/charts

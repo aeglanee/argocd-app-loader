@@ -1,0 +1,83 @@
+# Gateway API CRDs — the day-2 owner.
+#
+# WHY THIS APP EXISTS (outage 2026-08-02): these are the one CRD set in the cluster that no
+# chart ships. cnpg/cert-manager/etc. bundle their CRDs, so a Renovate chart bump moves the
+# CRDs with it. Cilium deliberately does NOT ship Gateway API CRDs — it requires them
+# pre-installed. That left them owned only by `task install-gateway-crds`, a day-0 one-shot,
+# frozen at whatever bootstrap wrote while the cilium chart advanced. When cilium 1.20 raised
+# its floor (ReferenceGrant v1 / TLSRoute v1 / BackendTLSPolicy) the operator refused to start
+# its Gateway API controller — which ALSO silently skips the Gateway TLS secret sync into
+# `cilium-secrets`, so Envoy served :443 with no certificate and reset every connection.
+#
+# `task install-gateway-crds` still installs them at cold-start (bootstrap/cilium-seed.yaml
+# sets gatewayAPI.enabled=true, so they must exist before ArgoCD does) and reads its version
+# from THIS file via yq — so the seed and the reconciler cannot disagree. Same seed→reconcile
+# split already used for the CNI and CoreDNS.
+#
+# No Chart.yaml/templates/ here on purpose: this is raw upstream YAML, not a chart, so the app
+# is `sources:`-only (loader passthrough). It can't use `chart.git` — that branch forces a Helm
+# source, and config/crd/* has no Chart.yaml.
+project: infrastructure
+wave: -30                 # ahead of cilium (-20): the operator checks for these at startup
+namespace: argocd         # CRDs are cluster-scoped; this is just the app's nominal home
+createNamespace: false
+
+# DANGER — READ BEFORE REMOVING THIS ANNOTATION.
+# The loader forces the resources-finalizer (`finalizers: []` CANNOT suppress it: the loader does
+# `.appMeta.finalizers | default (list ...)`, and Helm's `default` treats an empty list as empty,
+# so it falls back). That finalizer cascade-deletes this app's resources when the Application
+# object is deleted — and it fires REGARDLESS of prune:false. Here that means the 7 CRDs, and
+# deleting a CRD takes every CR of that kind with it: the Gateway and all 13 HTTPRoutes. Flipping
+# `cluster.apps.gateway-api-crds: false` would otherwise prune this Application → cascade → the
+# entire cluster ingress disappears from one toggle.
+#
+# Prune=false stops the parent `cluster` app from ever deleting this Application, which defuses
+# the toggle path (same insurance root-app.yaml documents for itself). A deliberate
+# `kubectl delete app gateway-api-crds` STILL cascades — orphan it first:
+#   kubectl -n argocd patch app gateway-api-crds -p '{"metadata":{"finalizers":[]}}' --type=merge
+# The real fix is a loader change so an explicit empty finalizer list is honoured.
+annotations:
+  argocd.argoproj.io/sync-options: Prune=false
+
+syncPolicy:
+  # Replaces the loader default wholesale (see _application.tpl) — retry block kept in step.
+  automated:
+    prune: false          # see the finalizer note: never let a bad render remove a CRD
+    selfHeal: true
+  retry:
+    limit: 10
+    backoff:
+      duration: 30s
+      factor: 2
+      maxDuration: 5m
+  syncOptions:
+    # NOT cosmetic: httproutes alone is ~429KB against the 256KB client-side
+    # last-applied-configuration ceiling; the whole set is ~993KB.
+    - ServerSideApply=true
+
+# AIRGAP: `sources:` is a verbatim loader passthrough, but repoURL is still resolved through
+# cluster.mirrors (entry github.com/kubernetes-sigs/gateway-api → Forgejo mirror when
+# via.forgejo is enabled). See docs/AIRGAP.md.
+#
+# VERSION: the two targetRevisions below MUST match. Renovate bumps both together (they are one
+# dependency in one file); if you edit by hand, edit both. Coupled to the cilium chart — bump
+# alongside it, never behind it.
+sources:
+  # Standard channel — the six cilium lists as REQUIRED. Deliberately excludes the optional
+  # listenersets/tcproutes/udproutes and the standard tlsroutes (see below).
+  - repoURL: https://github.com/kubernetes-sigs/gateway-api
+    targetRevision: "v1.6.3"
+    path: config/crd/standard
+    directory:
+      recurse: false
+      # yamllint disable-line rule:line-length
+      include: "{gateway.networking.k8s.io_gatewayclasses.yaml,gateway.networking.k8s.io_gateways.yaml,gateway.networking.k8s.io_httproutes.yaml,gateway.networking.k8s.io_referencegrants.yaml,gateway.networking.k8s.io_grpcroutes.yaml,gateway.networking.k8s.io_backendtlspolicies.yaml}"
+  # Experimental channel — TLSRoute only. Standard ships v1 alone; experimental ships
+  # v1 + v1alpha2 + v1alpha3, and cilium warns the standard one makes pre-existing
+  # TLSRoutes unreadable. Experimental is the superset — keep it.
+  - repoURL: https://github.com/kubernetes-sigs/gateway-api
+    targetRevision: "v1.6.3"
+    path: config/crd/experimental
+    directory:
+      recurse: false
+      include: "gateway.networking.k8s.io_tlsroutes.yaml"

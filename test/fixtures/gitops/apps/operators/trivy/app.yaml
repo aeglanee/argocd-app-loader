@@ -1,0 +1,4 @@
+project: operators
+wave: 15
+namespace: trivy
+createNamespace: true

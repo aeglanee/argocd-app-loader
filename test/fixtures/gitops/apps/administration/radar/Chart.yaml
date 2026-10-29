@@ -1,0 +1,11 @@
+apiVersion: v2
+name: radar
+description: >-
+  Wrapper around the upstream skyhook-io radar chart — Kubernetes dashboard (issues, topology,
+  timeline, GitOps diff, Hubble traffic, MCP) with Authentik OIDC login. IMPERSONATION model: Radar
+  authenticates the user itself, then acts as that user+groups against the apiserver via its own
+  ServiceAccount, so the cluster's OIDC group bindings (administration/rbac) decide what they may do.
+  Own namespace (restricted PSA), CNPG-backed event timeline, ESO-fed OIDC/session/ArgoCD secrets.
+type: application
+version: 0.1.0
+appVersion: "1.14.1"

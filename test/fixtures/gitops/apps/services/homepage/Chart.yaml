@@ -1,0 +1,5 @@
+apiVersion: v2
+name: homepage
+description: Local wrapper for the homepage dashboard (loader v2 — upstream chart in app.yaml; HTTPRoute + static service links live here).
+type: application
+version: 0.1.0

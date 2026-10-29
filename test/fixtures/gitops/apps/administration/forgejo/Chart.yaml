@@ -1,0 +1,9 @@
+apiVersion: v2
+name: forgejo
+description: >-
+  Wrapper around the Forgejo chart — CNPG Postgres + ESO admin/oidc/host-key + HTTPRoute. CI is
+  Forgejo Actions (runner = administration/forgejo-runner). Forgejo = community/GPLv3 fork of
+  Gitea.
+type: application
+version: 0.1.0
+appVersion: "15.0.2"

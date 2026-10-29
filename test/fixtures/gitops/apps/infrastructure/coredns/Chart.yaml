@@ -1,0 +1,6 @@
+apiVersion: v2
+name: coredns
+description: Wrapper around upstream coredns chart — the cluster DNS (kube-dns) at 10.96.0.10.
+type: application
+version: 0.1.0
+appVersion: "1.13.1"

@@ -1,0 +1,31 @@
+# Per-node power policy. pl1/pl2 are Intel RAPL package limits in WATTS
+# (sustained / short-burst); noTurbo disables turbo boost (caps at base frequency);
+# dgpuOff lets the unused discrete GPU power off (runtime PM → D3cold; false writes "on" back).
+#
+# Rationale: heat and headroom. (The June 2026 "adapter brownout" diagnosis was a red herring —
+# the reboots were the unconfigured tailscale extension. Measured 2026-10-25: CPU-package peaks
+# 28/40/51 W against 65/120/200 W adapters, and the batteries never discharged on AC.)
+#   server-a  i7-5500U 15W  — THERMAL (bad paste, hits 97C). Cap burst + kill turbo
+#                             to shed heat. RAPL already at floor.
+#   server-b  i5-8300H 45W  — was 45/80W. Trim; RAPL caps power so keep turbo.
+#   server-c  i7-11800H     — was 80/109W. Cap hard for heat, keep turbo within the budget.
+# Tune freely — the DaemonSet re-reads this every 60s.
+nodePowerTuning:
+  image: busybox:1.38
+  intervalSeconds: 60
+  nodes:
+    server-a:  # Radeon R7 M265
+      pl1: 15
+      pl2: 15
+      noTurbo: true
+      dgpuOff: true
+    server-b:  # GTX 1050 Ti
+      pl1: 35
+      pl2: 50
+      noTurbo: false
+      dgpuOff: true
+    server-c:  # RTX 3060
+      pl1: 45
+      pl2: 65
+      noTurbo: false
+      dgpuOff: true

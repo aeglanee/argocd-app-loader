@@ -1,0 +1,9 @@
+project: infrastructure
+wave: -19            # cluster DNS — right after Cilium, before workloads
+namespace: kube-system
+syncOptions:
+  - ServerSideApply=true
+chart:
+  name: coredns
+  version: "1.49.0"
+  repo: oci://ghcr.io/coredns/charts

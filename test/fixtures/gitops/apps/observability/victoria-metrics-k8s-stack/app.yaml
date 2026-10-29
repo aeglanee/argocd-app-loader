@@ -1,0 +1,11 @@
+project: observability
+wave: 0                   # scrapes whatever's up; no hard deps
+namespace: monitoring
+createNamespace: false   # templated with privileged PSA (node-exporter needs host ns/mounts)
+syncOptions:
+  - ServerSideApply=true
+  - SkipDryRunOnMissingResource=true   # operator installs the VM* CRDs in the same sync
+chart:
+  name: victoria-metrics-k8s-stack
+  version: "0.97.0"
+  repo: oci://ghcr.io/victoriametrics/helm-charts

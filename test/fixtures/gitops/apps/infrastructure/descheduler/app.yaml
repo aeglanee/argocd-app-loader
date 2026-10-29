@@ -1,0 +1,11 @@
+# Pure metadata — read by the umbrella loader, NOT passed to Helm.
+project: infrastructure
+wave: 20                  # leaf: only rebalances what's already running
+namespace: kube-system
+createNamespace: false
+syncOptions:
+  - ServerSideApply=true
+chart:
+  name: descheduler
+  version: "0.37.0"
+  repo: https://kubernetes-sigs.github.io/descheduler/

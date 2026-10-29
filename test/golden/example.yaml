@@ -1,0 +1,295 @@
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: demo
+  namespace: argocd
+spec:
+  description: "Demo group for the argocd-app-loader example consumer."
+  sourceRepos:
+    - '*'
+  destinations:
+    - namespace: '*'
+      server: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitchart
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "8"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "demo"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gittest
+  sources:
+    - repoURL: "https://github.com/rustfs/operator"
+      path: "deploy/rustfs-operator"
+      targetRevision: "0.0.2"
+      helm:
+        releaseName: gitchart
+        valuesObject:
+          {}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+    syncOptions:
+    - CreateNamespace=true
+
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hello
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "demo"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hello
+  source:
+    repoURL: "git@github.com:example/cluster.git"
+    targetRevision: HEAD
+    path: examples/consumer/apps/demo/hello
+    helm:
+      releaseName: hello
+      # Per-source value handling:
+      #   - .wrapperValues: the wrapper's own values.yaml, already tpl-rendered
+      #     against the consumer chart context by the loader so cross-cutting
+      #     references like example.com resolve.
+      #   - cluster: cluster identity/config, recursively overwritten on top so
+      #     cluster identity always wins over per-app declarations. Injected
+      #     under `cluster:` (NOT `global:`) so it cascades into THIS wrapper's
+      #     own templates (as .Values.cluster.*) WITHOUT silently propagating
+      #     into upstream subcharts via Helm's global mechanism — which would
+      #     risk collisions with charts that read global.* (imageRegistry,
+      #     storageClass, imagePullSecrets, ...). To deliberately feed an
+      #     upstream chart a real Helm global, set `global:` explicitly in that
+      #     wrapper's own values.
+      # Both go through valuesObject so we deliver structured YAML rather than
+      # a string blob — easier for ArgoCD to diff and for humans to read.
+      valuesObject:
+        cluster:
+          apps:
+            gitchart: true
+            hello: true
+            httpchart: true
+            wraponly: true
+            wrapped: true
+          argocdNamespace: argocd
+          clusterServer: https://kubernetes.default.svc
+          domain: example.com
+          localGitRepo: git@gitea.{{ .Values.cluster.domain }}:example/cluster.git
+          mirrors:
+            table:
+              ghcr.io:
+                project: ghcr-proxy
+                via: harbor
+              github.com/rustfs/operator:
+                repo: rustfs-operator
+                via: forgejo
+              stefanprodan.github.io/podinfo:
+                via: shim
+            via:
+              forgejo:
+                base: http://gitea.{{ .Values.cluster.domain }}/example
+                enabled: false
+              harbor:
+                enabled: false
+                host: harbor.{{ .Values.cluster.domain }}
+              shim:
+                enabled: false
+                project: shim-proxy
+          remoteGitRepo: git@github.com:example/cluster.git
+          repoBasePath: examples/consumer
+          targetRevision: HEAD
+          useLocalGit: false
+        message: hello, example.com
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+    syncOptions:
+    - CreateNamespace=true
+
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: httpchart
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "7"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "demo"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: httptest
+  sources:
+    - repoURL: "https://stefanprodan.github.io/podinfo"
+      chart: "podinfo"
+      targetRevision: "6.7.0"
+      helm:
+        releaseName: httpchart
+        valuesObject:
+          {}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+    syncOptions:
+    - CreateNamespace=true
+
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wraponly
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "demo"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: wraponly
+  sources:
+    - repoURL: "ghcr.io/stefanprodan/charts"
+      chart: "podinfo"
+      targetRevision: "6.7.0"
+      helm:
+        releaseName: wraponly
+        valuesObject:
+          replicaCount: 1
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+    syncOptions:
+    - CreateNamespace=true
+
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wrapped
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "demo"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: wrapped
+  sources:
+    - repoURL: "ghcr.io/stefanprodan/charts"
+      chart: "podinfo"
+      targetRevision: "6.7.0"
+      helm:
+        releaseName: wrapped
+        valuesObject:
+          replicaCount: 2
+          ui:
+            message: from example.com
+    - repoURL: "git@github.com:example/cluster.git"
+      targetRevision: HEAD
+      path: examples/consumer/apps/demo/wrapped
+      helm:
+        releaseName: wrapped
+        valuesObject:
+          cluster:
+            apps:
+              gitchart: true
+              hello: true
+              httpchart: true
+              wraponly: true
+              wrapped: true
+            argocdNamespace: argocd
+            clusterServer: https://kubernetes.default.svc
+            domain: example.com
+            localGitRepo: git@gitea.{{ .Values.cluster.domain }}:example/cluster.git
+            mirrors:
+              table:
+                ghcr.io:
+                  project: ghcr-proxy
+                  via: harbor
+                github.com/rustfs/operator:
+                  repo: rustfs-operator
+                  via: forgejo
+                stefanprodan.github.io/podinfo:
+                  via: shim
+              via:
+                forgejo:
+                  base: http://gitea.{{ .Values.cluster.domain }}/example
+                  enabled: false
+                harbor:
+                  enabled: false
+                  host: harbor.{{ .Values.cluster.domain }}
+                shim:
+                  enabled: false
+                  project: shim-proxy
+            remoteGitRepo: git@github.com:example/cluster.git
+            repoBasePath: examples/consumer
+            targetRevision: HEAD
+            useLocalGit: false
+          localGreeting: hi-from-example.com
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+    syncOptions:
+    - CreateNamespace=true

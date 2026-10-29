@@ -1,0 +1,12 @@
+# =============================================================================
+# Values for the upstream redis-operator chart (loader v2 — source A, OCI)
+# =============================================================================
+chart:
+  # Chart default requests = limits = 500Mi; p95 is ~43Mi. Only the request drops; the 500Mi
+  # limit stays as a cap.
+  resources:
+    requests:
+      memory: 64Mi
+  redisOperator:
+    metrics:
+      enabled: true

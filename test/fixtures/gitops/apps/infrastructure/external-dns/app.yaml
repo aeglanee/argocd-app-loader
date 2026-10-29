@@ -1,0 +1,9 @@
+project: infrastructure
+wave: -7                  # after the dns app (-8): its namespace, BIND and the TSIG Secret
+namespace: dns
+syncOptions:
+  - ServerSideApply=true
+chart:                     # HTTP-only Helm repo (no OCI published) → shim entry in cluster.mirrors
+  name: external-dns
+  version: "1.23.0"
+  repo: https://kubernetes-sigs.github.io/external-dns

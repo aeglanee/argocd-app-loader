@@ -1,0 +1,33 @@
+# Namespaces that get the B0 "allow intra-namespace" CNP (the namespace is the unit of
+# trust). Every namespace with workloads is listed here; cross-namespace + host + world
+# is what stays locked down. Keep in sync as namespaces are added/removed.
+namespaces:
+  - argocd
+  - authentik
+  - cert-manager
+  - chart-proxy
+  - cnpg-system
+  - dns
+  - external-secrets
+  - forgejo
+  - forgejo-runner
+  - garage
+  - ghostfolio
+  - grafana
+  - harbor
+  - homepage
+  - kube-system
+  - longhorn-system
+  - monitoring
+  - node-power-tuning
+  - openbao
+  - radar
+  - redis-system
+  - renovate
+  - tofu-state
+
+# The LAN(s) allowed to reach the web apps through the gateway (your home network). A named
+# CiliumCIDRGroup `lan` is generated from this and referenced in the gateway-ingress policy
+# (cidrGroupRef: lan). Add more ranges here as needed. Could move to global .network later.
+lanCIDRs:
+  - "192.168.1.0/24"

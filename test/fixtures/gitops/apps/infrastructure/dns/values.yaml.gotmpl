@@ -1,0 +1,63 @@
+# =============================================================================
+# LAN DNS front — the address the router hands out. {{ .Values.cluster.domain }} goes to BIND
+# (templates/bind.yaml, written by the external-dns app); everything else to the upstreams.
+# Later it can route names between clusters; today it is a forwarder with a cache.
+# =============================================================================
+chart:
+  isClusterService: false   # not kube-dns: no k8s-app label, so the cluster DNS Service can't select it
+  replicaCount: 2
+  serviceType: LoadBalancer
+  service:
+    annotations:
+      io.cilium/lb-ipam-ips: "{{ .Values.cluster.network.coreDnsIp }}"
+
+  servers:
+    - zones:
+        - zone: {{ .Values.cluster.domain }}.
+          use_tcp: true
+      port: 53
+      plugins:
+        - name: errors
+        - name: cache
+          parameters: 30
+        - name: forward
+          parameters: ". {{ .Values.cluster.network.dnsStoreIp }}"
+    - zones:
+        - zone: .
+          use_tcp: true
+      port: 53
+      plugins:
+        - name: errors
+        - name: health
+          configBlock: |-
+            lameduck 5s
+        - name: ready
+        - name: prometheus
+          parameters: 0.0.0.0:9153
+        - name: forward
+          parameters: ". {{ range $i, $u := .Values.cluster.network.dnsUpstreams }}{{ if $i }} {{ end }}{{ $u }}{{ end }}"
+        - name: cache
+          parameters: 30
+        - name: loop
+        - name: reload
+        - name: loadbalance
+
+  priorityClassName: {{ .Values.cluster.priorityClasses.critical }}   # the LAN's only DNS server and the nodes' resolver
+  resources:
+    requests:
+      memory: 32Mi
+
+  # Two replicas on different nodes: platform-critical pods don't preempt, so a single replica on a
+  # draining node would wait out its reboot — and LAN DNS would be gone meanwhile.
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: dns
+              app.kubernetes.io/name: coredns
+
+bind:
+  # ISC's official image; the tag is a moving minor line, the digest pins it.
+  image: docker.io/internetsystemsconsortium/bind9:9.21@sha256:66092edb53c081fa11b1fa8219e99065b0f497cb38f568ba789702a4c10e2590

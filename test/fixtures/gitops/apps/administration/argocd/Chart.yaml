@@ -1,0 +1,6 @@
+apiVersion: v2
+name: argocd
+description: Wrapper around the upstream argo-cd chart — adds ingress, OIDC secret, and ArgoCD-specific config customizations.
+type: application
+version: 0.1.0
+appVersion: "9.4.14"

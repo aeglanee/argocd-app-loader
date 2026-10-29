@@ -1,0 +1,89 @@
+# =============================================================================
+# Values for the upstream victoria-logs-single chart (OCI, like the VM stack). Deploys VictoriaLogs
+# (the log store) + the bundled Vector DaemonSet, which the chart pre-wires to ship kubernetes_logs
+# → http://victoria-logs-server.monitoring.svc:9428/insert/elasticsearch. In the monitoring ns
+# (privileged PSA) because Vector mounts hostPath /var/log/pods. Queried from Grafana.
+# =============================================================================
+chart:
+  fullnameOverride: victoria-logs   # clean names → service victoria-logs-server:9428
+
+  server:
+    retentionPeriod: "14d"
+    # Disk-space cap (GiB) so logs self-evict before the PVC fills — whichever of time/size hits first.
+    retentionDiskSpaceUsage: "18GiB"
+    persistentVolume:
+      enabled: true
+      storageClassName: longhorn
+      size: 20Gi
+    resources:
+      requests:
+        memory: 480Mi
+
+  # Bundled Vector DaemonSet — collects all pod logs; chart auto-targets victoria-logs-server.
+  vector:
+    enabled: true
+    resources:
+      requests:
+        memory: 224Mi
+    podPriorityClassName: system-node-critical   # per-node agent: must never sit Pending on a full node
+    # Extend the chart's `parser` remap transform (kubernetes_logs → parser → VictoriaLogs) to set a
+    # top-level `level` field so VMUI can badge + filter by severity. Deep-merges over the chart
+    # default — only .source is replaced; the auto-computed sink endpoint stays. Reliable sources only
+    # (no keyword guessing): structured JSON level/severity, and klog's E/W/I/F prefix (k8s components).
+    customConfig:
+      transforms:
+        parser:
+          source: |
+            # chart default: JSON → structured object; plain/logfmt/klog → keep the raw string.
+            .log = parse_json(.message) ?? .message
+            msg = to_string(.message) ?? ""
+
+            # Log-level detection cascade — try sources in order of reliability, first hit wins.
+            # Composes Vector's own parsers (parse_logfmt/parse_regex) rather than hand-rolling formats.
+            lvl = null
+
+            # 1. structured JSON: an embedded level/severity field.
+            if is_object(.log) {
+                lvl = .log.level || .log.severity || .log.lvl || .log.loglevel
+            }
+            # 2. klog (kube-* components): leading E/W/I/F + 4 digits, e.g. "E0621 ...".
+            if lvl == null {
+                if match(msg, r'^E\d{4}') { lvl = "error" }
+                else if match(msg, r'^W\d{4}') { lvl = "warn" }
+                else if match(msg, r'^I\d{4}') { lvl = "info" }
+                else if match(msg, r'^F\d{4}') { lvl = "fatal" }
+            }
+            # 3. logfmt (key=value): level=info / lvl=warn / severity=error (gRPC, Longhorn, Cilium...).
+            if lvl == null {
+                kv = parse_logfmt(msg) ?? {}
+                lvl = kv.level || kv.lvl || kv.severity || kv.loglevel
+            }
+            # 4. bracket prefix: [INFO] [WARN] [ERROR] ... (CoreDNS query logs etc.). Level-word
+            #    constraint avoids matching unrelated brackets.
+            if lvl == null {
+                b = parse_regex(msg, r'\[(?P<l>TRACE|DEBUG|INFO|WARN|WARNING|ERROR|ERR|FATAL|CRIT|CRITICAL)\]') ?? {}
+                lvl = b.l
+            }
+            # 5. HTTP access logs: status code after the request line → level by class.
+            if lvl == null {
+                h = parse_regex(msg, r'HTTP/\d(\.\d)?"\s+(?P<code>[1-5]\d{2})') ?? {}
+                if h.code != null {
+                    c = to_int(h.code) ?? 0
+                    if c >= 500 { lvl = "error" } else if c >= 400 { lvl = "warn" } else { lvl = "info" }
+                }
+            }
+
+            # Normalize aliases, then set the field — but ONLY for real level keywords. parse_logfmt
+            # turns a bare word into key=true, so a message merely containing "level" became
+            # level=true; the whitelist rejects that (and any other junk) → those stay unlabeled.
+            if lvl != null {
+                l = downcase(to_string(lvl) ?? "")
+                if l == "warning" { l = "warn" }
+                if l == "err" { l = "error" }
+                if l == "critical" || l == "crit" || l == "panic" { l = "fatal" }
+                if includes(["trace", "debug", "info", "warn", "error", "fatal"], l) {
+                    .level = l
+                }
+            }
+
+            del(.message)

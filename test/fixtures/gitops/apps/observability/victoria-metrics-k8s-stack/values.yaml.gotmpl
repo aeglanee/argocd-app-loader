@@ -1,0 +1,99 @@
+# =============================================================================
+# VictoriaMetrics k8s stack — metrics + dashboards. node-exporter exposes CPU
+# thermals (node_thermal_zone_temp / node_hwmon_temp_celsius) so we can watch
+# server-c climb toward its 100C trip. Logs (VictoriaLogs + Vector) come later.
+# =============================================================================
+chart:
+  # Talos doesn't expose these on scrapable endpoints → don't create dead targets.
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeEtcd:
+    enabled: false
+  kubeProxy:
+    enabled: false
+
+  # kubelet /metrics/resource re-exports container_{cpu_usage_seconds_total,memory_working_set_bytes,
+  # start_time_seconds} that /metrics/cadvisor already provides → every sum over them counted each
+  # container TWICE (node/cluster memory panels in the default dashboards read 2×; queries with
+  # image!="" escape it because the resource copies carry no image label). Drop the copies from the
+  # resource scrape only; its pod_*/node_*/container_swap_* series are unique and stay.
+  # NB the chart mergeOverwrite()s this spec over kubelet.vmScrape.spec and REPLACES lists, so the
+  # chart's default metricRelabelConfigs are repeated here verbatim.
+  kubelet:
+    vmScrapes:
+      resources:
+        spec:
+          path: /metrics/resource
+          metricRelabelConfigs:
+            - action: labeldrop
+              regex: (uid)
+            - action: labeldrop
+              regex: (id|name)
+            - action: drop
+              source_labels: [__name__]
+              regex: (rest_client_request_duration_seconds_bucket|rest_client_request_duration_seconds_sum|rest_client_request_duration_seconds_count)
+            - action: drop
+              source_labels: [__name__]
+              regex: container_(cpu_usage_seconds_total|memory_working_set_bytes|start_time_seconds)
+
+  # Metrics storage (Longhorn PVC, modest retention).
+  # 10Gi hit 96% full on 2026-08-02. Unlike victoria-logs — which caps itself via
+  # retentionDiskSpaceUsage and so plateaus safely — vmsingle has ONLY a time-based retention,
+  # so it grows unbounded until the disk fills and ingestion stops. 30Gi buys real headroom at
+  # 14d. The durable fix is object storage (Garage) + retention rather than a bigger PVC.
+  vmsingle:
+    spec:
+      retentionPeriod: "14d"
+      storage:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 30Gi
+
+  # MVP = metrics + dashboards; skip alerting for now.
+  defaultRules:
+    create: false
+  alertmanager:
+    enabled: false
+  vmalert:
+    enabled: false
+
+  defaultDashboards:
+    enabled: true
+    # The kube-prometheus mixin (28 dashboards: Compute Resources, USE, Windows/AIX/macOS, ...) reads
+    # recording rules nothing evaluates here (no vmalert) → mostly empty panels, and it duplicates the
+    # dotdc Kubernetes/Views set, which uses raw queries. Keep dotdc + Node Exporter Full + VM's own;
+    # the sync-job prunes the rest. Rules come from defaultRules.sources, unaffected.
+    sources:
+      kube-prometheus:
+        enabled: false
+
+  # Node + CPU-thermal metrics; tolerate everything so it runs on all 3 nodes.
+  prometheus-node-exporter:
+    enabled: true
+    priorityClassName: system-node-critical   # per-node agent: must never sit Pending on a full node
+    tolerations:
+      - operator: Exists
+    # Run as ROOT so the rapl collector can read the root-only /sys/class/powercap/.../energy_uj
+    # (CVE-2020-8694 mitigation). The DAC_READ_SEARCH cap is ineffective for a non-root process
+    # (kernel drops added caps on exec without ambient/file-caps), so root is required to surface
+    # node_rapl_* (watts). Accepted tradeoff: node-exporter is already a host-level monitor.
+    securityContext:
+      runAsNonRoot: false
+      runAsUser: 0
+      runAsGroup: 0
+      fsGroup: 0
+    containerSecurityContext:
+      readOnlyRootFilesystem: true
+
+  kube-state-metrics:
+    enabled: true
+
+  # Grafana is now its own first-class app (observability/grafana) — Authentik OIDC + a
+  # non-privileged (baseline PSA) ns + its own HTTPRoute. Disabled here so the bundled subchart
+  # Grafana stops rendering and the new app owns grafana.<domain>. defaultDashboards stays on:
+  # its dashboard CMs (label grafana_dashboard) are adopted by the standalone grafana sidecar.
+  grafana:
+    enabled: false

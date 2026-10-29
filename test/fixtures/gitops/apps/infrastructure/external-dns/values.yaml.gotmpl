@@ -1,0 +1,44 @@
+# =============================================================================
+# external-dns → BIND (dns app). Every HTTPRoute hostname under {{ .Values.cluster.domain }}
+# becomes an A record to its Gateway's IP; hand-made records are DNSEndpoint objects
+# (CRD shipped by the chart). policy sync + AXFR: records whose source is gone are deleted,
+# but only those carrying our TXT owner id. The old stale-record/apex trouble was the etcd
+# store's (CoreDNS etcd plugin), not external-dns's.
+# =============================================================================
+chart:
+  provider:
+    name: rfc2136
+  sources:
+    - gateway-httproute
+    - crd
+  policy: sync
+  registry: txt
+  txtOwnerId: {{ .Values.cluster.name }}
+  domainFilters:
+    - {{ .Values.cluster.domain }}
+  # BIND has no disk: after it restarts (every node drain) the zone is bare until the next loop,
+  # so every name is NXDOMAIN meanwhile — 66s measured at the 1m default. 15s keeps that short;
+  # a loop is one AXFR of a few dozen records.
+  interval: 15s
+  triggerLoopOnEvent: true   # also write on route changes, not only every interval
+
+  extraArgs:
+    - --rfc2136-host={{ .Values.cluster.network.dnsStoreIp }}
+    - --rfc2136-port=53
+    - --rfc2136-zone={{ .Values.cluster.domain }}
+    - --rfc2136-tsig-keyname=externaldns
+    - --rfc2136-tsig-secret-alg=hmac-sha256
+    - --rfc2136-axfr
+    - --rfc2136-min-ttl=60s
+
+  env:
+    - name: EXTERNAL_DNS_RFC2136_TSIG_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: dns-tsig
+          key: secret
+
+  priorityClassName: {{ .Values.cluster.priorityClasses.critical }}
+  resources:
+    requests:
+      memory: 48Mi

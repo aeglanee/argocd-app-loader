@@ -1,0 +1,21 @@
+project: platform
+wave: 5
+namespace: garage
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+  - RespectIgnoreDifferences=true
+chart:                     # GIT-sourced chart (Garage ships no registry chart) — `path` makes it a git chart
+  repo: https://github.com/deuxfleurs-org/garage   # → Forgejo mirror-bot/garage via cluster.mirrors (forgejo entry)
+  path: script/helm/garage
+  version: v2.5.0
+ignoreDifferences:
+  # The chart auto-generates rpcSecret and preserves it via `lookup` — but ArgoCD's
+  # repo-server renders WITHOUT cluster access, so lookup is empty and it regenerates a
+  # fresh value every sync. Pin the live value so inter-node RPC auth stays stable.
+  # (Internal secret — fine to regenerate on a clean rebuild.) Needs RespectIgnoreDifferences.
+  - group: ""
+    kind: Secret
+    name: garage-rpc-secret
+    jsonPointers:
+      - /data

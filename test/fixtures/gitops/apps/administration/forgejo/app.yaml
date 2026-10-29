@@ -1,0 +1,8 @@
+project: administration
+wave: 10
+namespace: forgejo
+createNamespace: true
+chart:
+  name: forgejo
+  version: "17.3.2"
+  repo: oci://code.forgejo.org/forgejo-helm

@@ -1,0 +1,11 @@
+# =============================================================================
+# Values for the upstream cloudnative-pg subchart
+# =============================================================================
+chart:
+  monitoring:
+    # Re-enable with the observability stack (VictoriaMetrics) — the PodMonitor CRD
+    # doesn't exist yet, so enabling it now would fail the sync.
+    podMonitorEnabled: false
+  resources:
+    requests:
+      memory: 96Mi

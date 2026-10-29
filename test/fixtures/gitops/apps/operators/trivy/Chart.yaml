@@ -1,0 +1,11 @@
+apiVersion: v2
+name: trivy
+description: Wrapper around upstream trivy-operator chart — disabled by default; flip global.apps.trivy:true to deploy.
+type: application
+version: 0.1.0
+appVersion: "0.27.4"
+
+dependencies:
+  - name: trivy-operator
+    version: "0.37.0"
+    repository: "https://aquasecurity.github.io/helm-charts"

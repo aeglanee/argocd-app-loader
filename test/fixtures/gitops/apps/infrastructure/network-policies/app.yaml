@@ -1,0 +1,10 @@
+# Pure metadata — read by the umbrella loader, NOT passed to Helm.
+# The cluster-wide network-policy layer (default-deny + baselines). Local templates
+# only, no upstream chart. Gated on features.networkPolicy.enabled. See
+# docs/NETWORK-POLICY.md + docs/NETWORK-POLICY-MAP.md.
+project: infrastructure
+wave: 100                 # last — all target namespaces exist before the per-ns B0 CNPs apply
+namespace: kube-system    # the CCNPs are cluster-scoped; this is just the app's home ns
+createNamespace: false
+syncOptions:
+  - ServerSideApply=true

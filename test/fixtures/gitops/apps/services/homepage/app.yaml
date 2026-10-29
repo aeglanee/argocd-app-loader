@@ -1,0 +1,8 @@
+project: services
+wave: 10
+namespace: homepage
+createNamespace: true
+chart:                   # loader v2 — HTTP chart via the shim (jameswynn publishes no OCI). Airgapped through Harbor.
+  name: homepage
+  version: "2.1.0"
+  repo: https://jameswynn.github.io/helm-charts

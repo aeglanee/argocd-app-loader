@@ -1,0 +1,9 @@
+# Pure metadata — read by the umbrella loader, NOT passed to Helm.
+# The cluster's PriorityClasses (names from cluster.priorityClasses). Local templates only.
+project: infrastructure
+wave: -28                 # ahead of argocd (-25). Waves do NOT gate other apps' syncs — when adding a
+                          # new class, let it exist before committing anything that references it
+namespace: kube-system    # PriorityClasses are cluster-scoped; this is just the app's home ns
+createNamespace: false
+syncOptions:
+  - ServerSideApply=true

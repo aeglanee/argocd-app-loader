@@ -1,0 +1,9 @@
+apiVersion: v2
+name: victoria-metrics-k8s-stack
+description: >-
+  Wrapper around victoria-metrics-k8s-stack — vmsingle + vmagent + node-exporter (incl. CPU
+  thermal) + kube-state-metrics. Grafana is its own app (observability/grafana); logs are
+  observability/victoria-logs.
+type: application
+version: 0.1.0
+appVersion: "1.145.0"

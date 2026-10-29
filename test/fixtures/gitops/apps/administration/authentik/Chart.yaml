@@ -1,0 +1,8 @@
+apiVersion: v2
+name: authentik
+description: |
+  Local wrapper for Authentik (loader v2 — upstream chart in app.yaml). Adds
+  CNPG-managed Postgres, the OT redis-operator Replication+Sentinel, ESO secrets,
+  and the Cilium Gateway HTTPRoute.
+type: application
+version: 0.1.0

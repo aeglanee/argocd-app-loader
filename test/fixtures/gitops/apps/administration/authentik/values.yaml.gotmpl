@@ -1,0 +1,137 @@
+# =============================================================================
+# Values for the upstream authentik chart (loader v2 — source A).
+# Postgres + Redis disabled in the chart — provided externally by CNPG and the
+# OT redis-operator (templates/postgres.yaml, templates/redis.yaml). Secrets via
+# ESO from OpenBao providers/authentik (templates/authentik-*-secret.yaml).
+# =============================================================================
+
+# OIDC clients: one Authentik OAuth2 provider + application each, client_id = the key. `app` is the
+# cluster.apps toggle that switches the client (no `app` = always on). The redirect must match the
+# app's real callback exactly. The client secret is generated into kv/apps/<key>/oidc
+# (templates/oidc-client-secrets.yaml); the app's own ESO reads it from there.
+# `groups` (named <app>-<role>) are created by the blueprint and gate the login: only their members
+# may sign in, and the app maps them to its roles. full-admin inherits every group.
+oidcClients:
+  argocd:
+    app: argocd
+    name: ArgoCD
+    redirect: "https://argocd.{{ .Values.cluster.domain }}/auth/callback"
+    groups: [argocd-admin, argocd-viewer]
+  forgejo:
+    app: forgejo
+    name: Forgejo
+    redirect: "https://forgejo.{{ .Values.cluster.domain }}/user/oauth2/authentik/callback"
+    groups: [forgejo-admin, forgejo-user]
+  harbor:
+    app: harbor
+    name: Harbor
+    redirect: "https://harbor.{{ .Values.cluster.domain }}/c/oidc/callback"
+    groups: [harbor-admin]
+  grafana:
+    app: grafana
+    name: Grafana
+    redirect: "https://grafana.{{ .Values.cluster.domain }}/login/generic_oauth"
+    groups: [grafana-admin, grafana-viewer]
+  # k8s-* map to ClusterRoles in administration/rbac; Radar impersonates the user with them.
+  radar:
+    app: radar
+    name: Radar
+    redirect: "https://radar.{{ .Values.cluster.domain }}/auth/callback"
+    groups: [k8s-admin, k8s-viewer]
+  # kubectl OIDC: the kube-apiserver (talos/talconfig.yaml oidc-client-id) trusts this client. Named
+  # after the retired Headlamp; renaming it means re-applying the apiserver args.
+  headlamp:
+    name: Headlamp
+    redirect: "https://headlamp.{{ .Values.cluster.domain }}/oidc-callback"
+
+# Dashboards without their own auth, put behind Authentik's embedded proxy outpost and gated to
+# their `groups` (all-or-nothing access). The app's HTTPRoute points at authentik-server; the outpost
+# matches the host.
+proxyApps:
+  hubble:
+    app: cilium
+    name: Hubble
+    externalHost: "https://hubble.{{ .Values.cluster.domain }}"
+    internalHost: "http://hubble-ui.kube-system.svc"
+    groups: [hubble-viewer]
+  longhorn:
+    app: longhorn
+    name: Longhorn
+    externalHost: "https://longhorn.{{ .Values.cluster.domain }}"
+    internalHost: "http://longhorn-frontend.longhorn-system.svc"
+    groups: [longhorn-admin]
+  victoria-logs:
+    app: victoria-logs
+    name: VictoriaLogs
+    externalHost: "https://logs.{{ .Values.cluster.domain }}"
+    internalHost: "http://victoria-logs-server.monitoring.svc:9428"
+    groups: [logs-viewer]
+
+chart:
+  authentik:
+    postgresql:
+      host: "authentik-postgres-rw.authentik.svc.cluster.local"
+      user: "authentik"
+      name: "authentik"
+
+  global:
+    env:
+      - name: AUTHENTIK_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: authentik-core-secret
+            key: secret_key
+      - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: authentik-core-secret
+            key: bootstrap_password
+      - name: AUTHENTIK_BOOTSTRAP_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: authentik-core-secret
+            key: bootstrap_token
+      - name: AUTHENTIK_POSTGRESQL__PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: authentik-postgres-app
+            key: password
+      # Authentik is a read+write Redis client → use the operator's MASTER-only
+      # service (the plain authentik-redis svc spans read-only replicas).
+      - name: AUTHENTIK_REDIS__HOST
+        value: "authentik-redis-master.authentik.svc.cluster.local"
+      - name: AUTHENTIK_REDIS__PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: authentik-redis-secret
+            key: password
+      - name: DOMAIN
+        value: "{{ .Values.cluster.domain }}"
+
+  postgresql:
+    enabled: false
+  redis:
+    enabled: false
+
+  server:
+    resources:
+      requests:
+        memory: 704Mi
+  # templates/blueprint.yaml — mounted into the worker, which applies it.
+  blueprints:
+    configMaps: [authentik-blueprints]
+
+  worker:
+    resources:
+      requests:
+        memory: 320Mi
+    # OIDC client secrets for the blueprint's !File tags. Not optional on purpose: without the Secret
+    # the worker doesn't start, instead of applying the blueprint with empty secrets.
+    volumes:
+      - name: oidc-clients
+        secret:
+          secretName: authentik-oidc-clients
+    volumeMounts:
+      - name: oidc-clients
+        mountPath: /oidc
+        readOnly: true

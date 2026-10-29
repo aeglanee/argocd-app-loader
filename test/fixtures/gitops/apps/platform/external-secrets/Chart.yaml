@@ -1,0 +1,8 @@
+apiVersion: v2
+name: external-secrets
+description: >-
+  Local chart — the cluster-wide `openbao` ClusterSecretStore + its dedicated SA/token. The
+  upstream ESO chart is app.yaml chart.repo.
+type: application
+version: 0.1.0
+appVersion: "0.10.4"

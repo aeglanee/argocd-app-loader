@@ -1,0 +1,11 @@
+apiVersion: v2
+name: node-power-tuning
+description: >-
+  Per-node power tuning via a privileged DaemonSet that re-applies Intel RAPL
+  package power limits (PL1/PL2), turbo state and runtime PM for the unused
+  discrete GPUs to host /sys on every boot — Talos has no userspace, and these
+  knobs reset to firmware defaults each reboot. Sheds heat and idle power. Local
+  templates only, no upstream chart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

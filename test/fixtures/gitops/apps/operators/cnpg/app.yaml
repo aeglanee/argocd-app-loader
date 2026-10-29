@@ -1,0 +1,11 @@
+project: operators
+wave: -5
+namespace: cnpg-system
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+  - SkipDryRunOnMissingResource=true
+chart:
+  name: cloudnative-pg
+  version: "0.29.1"
+  repo: oci://ghcr.io/cloudnative-pg/charts

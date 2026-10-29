@@ -1,0 +1,32 @@
+project: observability
+wave: 1                    # after victoria-metrics-k8s-stack (wave 0) — needs vmsingle as datasource
+namespace: grafana
+createNamespace: false     # own ns templated below with baseline PSA (out of monitoring's privileged ns)
+syncOptions:
+  - ServerSideApply=true
+  - RespectIgnoreDifferences=true   # never APPLY the ignored fields below, not just hide the diff
+
+# The grafana chart mints a random admin-password in-template; ArgoCD's repo-server renders
+# without cluster `lookup`, so every render is a fresh mint → permanent OutOfSync, and the
+# Deployment's checksum/secret changes with it → a pod rollout on every re-render (12 in 9 days;
+# one deadlocked on the RWO PVC). Admin login is break-glass only (Authentik OIDC is primary), so
+# ignore both (read the live `grafana` secret's admin-password for break-glass).
+ignoreDifferences:
+  - group: ""
+    kind: Secret
+    name: grafana
+    namespace: grafana
+    jsonPointers:
+      - /data/admin-password
+      - /data/admin-user
+  - group: apps
+    kind: Deployment
+    name: grafana
+    namespace: grafana
+    jsonPointers:
+      - /spec/template/metadata/annotations/checksum~1secret
+
+chart:
+  name: grafana
+  version: "14.1.0"   # grafana-community took over the chart (grafana/helm-charts froze at 10.5.15); 13.x = distroless + read-only rootfs
+  repo: oci://ghcr.io/grafana-community/helm-charts

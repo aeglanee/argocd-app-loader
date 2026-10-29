@@ -1,0 +1,10 @@
+project: administration
+wave: 13                  # after forgejo (10) — connects to it
+namespace: forgejo-runner
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+chart:                    # runner + the k8s backend plugin (community, eleboucher/runner-k8s-plugin).
+  name: forgejo-runner    # Chart version tracks the runner; its runner/plugin image pair is the tested combo.
+  version: "13.2.1"
+  repo: oci://git.erwanleboucher.dev/eleboucher/charts

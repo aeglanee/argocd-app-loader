@@ -1,0 +1,10 @@
+project: infrastructure
+wave: -8                  # LAN DNS — after ESO (the TSIG key); external-dns follows at -7
+namespace: dns
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+chart:                     # the DNS front is a second release of the coredns chart (cluster DNS = coredns app)
+  name: coredns
+  version: "1.49.0"
+  repo: oci://ghcr.io/coredns/charts

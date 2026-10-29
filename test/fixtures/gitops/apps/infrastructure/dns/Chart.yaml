@@ -1,0 +1,7 @@
+apiVersion: v2
+name: dns
+description: >-
+  LAN DNS — a CoreDNS front (upstream coredns chart) on the DNS LoadBalancer IP, plus BIND holding
+  the domain's zone (local templates), written by the external-dns app over RFC2136.
+type: application
+version: 0.1.0

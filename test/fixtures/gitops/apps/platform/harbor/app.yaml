@@ -1,0 +1,8 @@
+project: platform
+wave: 10
+namespace: harbor
+createNamespace: true
+chart:                   # loader v2 — HTTP chart via the shim (goharbor publishes no OCI). Airgapped through Harbor.
+  name: harbor
+  version: "1.19.4"
+  repo: https://helm.goharbor.io

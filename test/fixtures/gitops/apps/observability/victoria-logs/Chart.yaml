@@ -1,0 +1,9 @@
+apiVersion: v2
+name: victoria-logs-single
+description: >-
+  Wrapper around victoria-logs-single — the VictoriaLogs store + the bundled Vector DaemonSet
+  (collects every pod/node log and ships it in). The logs half of observability; queried in
+  Grafana next to the VM metrics.
+type: application
+version: 0.1.0
+appVersion: "1.51.0"

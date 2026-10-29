@@ -1,0 +1,10 @@
+project: administration
+wave: 10
+namespace: authentik
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+chart:                     # OCI (upstream publishes both; OCI goes through the ghcr.io harbor mirror entry)
+  name: authentik
+  version: "2026.8.5"
+  repo: oci://ghcr.io/goauthentik/helm-charts

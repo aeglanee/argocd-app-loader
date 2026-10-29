@@ -1,0 +1,9 @@
+project: infrastructure
+wave: -10                # after external-secrets (-11) — the OVH-creds ExternalSecret needs ESO
+namespace: cert-manager
+createNamespace: true
+releaseName: cert-manager
+chart:
+  name: cert-manager
+  version: "v1.21.3"
+  repo: oci://quay.io/jetstack/charts

@@ -1,0 +1,20 @@
+project: infrastructure
+wave: -18                 # before metrics-server, and before the Talos rotate-server-certificates flip
+namespace: kubelet-serving-cert-approver
+createNamespace: false    # the upstream manifest carries its own Namespace
+syncOptions:
+  - ServerSideApply=true
+# Approves the kubelets' serving-certificate CSRs (signer kubernetes.io/kubelet-serving), which
+# Talos only sends with machine.kubelet.extraArgs.rotate-server-certificates=true (talconfig).
+# That gives every kubelet a cluster-CA-signed serving cert, so metrics-server can verify it
+# instead of running with --kubelet-insecure-tls. Talos' documented metrics-server setup.
+# No chart upstream — raw manifests, consumed as a `sources:` directory (like gateway-api-crds).
+# If this app is down, NEW kubelet cert requests sit pending → `kubectl logs/exec` to that node
+# fail once its current cert expires; running pods are unaffected.
+sources:
+  - repoURL: https://github.com/alex1989hu/kubelet-serving-cert-approver
+    targetRevision: "v0.12.1"
+    path: deploy
+    directory:
+      recurse: false
+      include: "standalone-install.yaml"

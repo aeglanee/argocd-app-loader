@@ -1,0 +1,9 @@
+project: services
+wave: 10
+namespace: ghostfolio
+createNamespace: true
+chart:                                        # loader v2 — GIT-sourced chart. ByTheHugo deleted ALL .tgz releases
+  repo: https://github.com/ByTheHugo/ghostfolio-helm   # (helm-repo path 404s); the git source is intact. Public for now —
+  path: chart                                 # add a cluster.mirrors.table forgejo entry + `task forgejo-mirrors` to airgap.
+  version: "ghostfolio-0.5.4"      # git TAG name — the repo tags releases `ghostfolio-<chartVersion>`,
+                                    # a bare "0.5.4" is not a resolvable git ref.

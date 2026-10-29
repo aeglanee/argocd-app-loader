@@ -1,0 +1,5 @@
+apiVersion: v2
+name: priority-classes
+description: The cluster's PriorityClasses — what the kubelet evicts first and the scheduler may preempt when memory runs short.
+type: application
+version: 0.1.0

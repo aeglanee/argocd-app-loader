@@ -1,0 +1,7 @@
+apiVersion: v2
+name: external-dns
+description: >-
+  Wrapper around the external-dns chart — writes HTTPRoute hostnames and DNSEndpoint records into
+  the dns app's BIND over RFC2136.
+type: application
+version: 0.1.0

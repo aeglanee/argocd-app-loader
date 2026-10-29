@@ -1,0 +1,8 @@
+apiVersion: v2
+name: openbao
+description: >-
+  Wrapper around the OpenBao chart — single-node (file storage on Longhorn), auto-init +
+  auto-unseal (keys in a k8s Secret), minimal kv/k8s-auth/ESO-role config.
+type: application
+version: 0.1.0
+appVersion: "2.5.4"

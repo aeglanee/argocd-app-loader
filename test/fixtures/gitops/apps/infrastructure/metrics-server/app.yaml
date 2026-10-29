@@ -1,0 +1,10 @@
+project: infrastructure
+wave: -17                 # after kubelet-serving-cert-approver (-18)
+namespace: kube-system
+createNamespace: false
+syncOptions:
+  - ServerSideApply=true
+chart:                    # HTTP-only chart (no OCI published) → shim when mirrored
+  name: metrics-server
+  version: "3.14.0"
+  repo: https://kubernetes-sigs.github.io/metrics-server

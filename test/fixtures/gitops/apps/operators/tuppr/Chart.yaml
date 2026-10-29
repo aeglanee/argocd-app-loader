@@ -1,0 +1,8 @@
+apiVersion: v2
+name: tuppr
+description: >-
+  Wrapper around tuppr — rolls Talos and Kubernetes upgrades node by node through the Talos API.
+  The target versions are the TalosUpgrade/KubernetesUpgrade CRs in templates/, bumped by
+  Renovate.
+type: application
+version: 0.1.0

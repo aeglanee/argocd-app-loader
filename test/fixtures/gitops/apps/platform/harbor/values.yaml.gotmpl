@@ -1,0 +1,170 @@
+# =============================================================================
+# Values for the upstream harbor chart (loader v2 — source A, HTTP via shim)
+# OIDC config-overwrite is gated on the authentik peer-app toggle.
+# =============================================================================
+chart:
+  externalURL: https://harbor.{{ .Values.cluster.domain }}
+
+  database:
+    type: external
+    external:
+      host: harbor-postgres-rw.harbor.svc.cluster.local
+      port: "5432"
+      username: harbor
+      coreDatabase: harbor
+      existingSecret: harbor-postgres-app
+
+  # Cache + job queue via the OT-Container-Kit redis-operator (templates/redis.yaml):
+  # a RedisReplication + RedisSentinel. Harbor is a read+write client, so it MUST use the
+  # master-only service `harbor-redis-master` (the plain `harbor-redis` svc load-balances
+  # across master+replicas → writes to a read-only replica fail). The operator re-labels
+  # the master on failover, so this service follows it. Internal, passwordless; logical DBs 0-3.
+  redis:
+    type: external
+    external:
+      addr: "harbor-redis-master.harbor.svc.cluster.local:6379"
+
+  # Exposed via the shared Cilium Gateway (templates/harbor-httproute.yaml). Harbor serves plain
+  # HTTP on the clusterIP front service; TLS is terminated at the gateway. externalURL stays https
+  # so Harbor emits https links + registry tokens correctly behind the offloaded TLS.
+  expose:
+    type: clusterIP
+    tls:
+      enabled: false
+    clusterIP:
+      name: harbor
+      ports:
+        httpPort: 80
+
+  persistence:
+    enabled: true
+    # Registry layers live in Garage S3 (the shared hub) → the registry is stateless,
+    # so it can run 2+ replicas spread across nodes and never RWO Multi-Attach-deadlocks
+    # on a roll. Creds via ESO (harbor-s3-creds ← OpenBao providers/garage-harbor, the
+    # scoped key from terraform/garage; templates/s3-creds-eso.yaml). region must match
+    # Garage's s3_region ("garage"). The jobservice PVC below is unrelated (kept).
+    imageChartStorage:
+      type: s3
+      # Stream blobs through Harbor instead of 307-redirecting clients to the S3 backend.
+      # The pre-signed URL points at regionendpoint (garage.garage.svc.cluster.local) — an
+      # in-cluster DNS name that EXTERNAL clients (laptop) and TALOS NODES (containerd uses
+      # host DNS, not CoreDNS) can't resolve → fresh image pulls via the mirror break. With
+      # this true, only harbor.<domain> is ever contacted; Harbor reaches Garage internally.
+      disableredirect: true
+      s3:
+        existingSecret: harbor-s3-creds
+        region: garage
+        bucket: harbor-registry
+        regionendpoint: http://garage.garage.svc.cluster.local:3900
+        secure: false
+        v4auth: true
+    persistentVolumeClaim:
+      registry:
+        storageClass: longhorn
+        size: 50Gi
+      # Trivy's vulnerability-DB cache. Chart default 5Gi reached 93% on 2026-08-02 — the DB
+      # only grows as upstream CVE data does, so 5Gi was never going to hold. Purely a cache:
+      # it is safe to delete, trivy re-downloads on start.
+      # NOTE: this is a StatefulSet volumeClaimTemplate, which Kubernetes treats as IMMUTABLE,
+      # so changing this value alone will NOT resize the live PVC — ArgoCD's StatefulSet update
+      # is rejected. Because the data is disposable, the resize procedure is simply:
+      #   kubectl -n harbor delete sts harbor-trivy && kubectl -n harbor delete pvc data-harbor-trivy-0
+      # then let ArgoCD recreate both at the size below.
+      trivy:
+        storageClass: longhorn
+        size: 15Gi
+
+  existingSecretAdminPassword: harbor-admin-password
+  harborAdminPassword: ""
+  existingSecretSecretKey: harbor-secret-key
+
+  # =============================================================================
+  # HA: survive 1 node loss. Each stateless component runs 2 replicas, soft
+  # anti-affinity spreads them across nodes (preferred, not required — so a
+  # rolling update's surge pod can still schedule when a node is down). Registry
+  # is stateless on Garage S3; jobservice logs to the DB (jobLoggers) so it drops
+  # its RWO PVC. Postgres (CNPG) is already spread; Redis HA is done separately.
+  # =============================================================================
+  core:
+    replicas: 2
+    resources:
+      requests:
+        memory: 96Mi
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: harbor
+                  component: core
+              topologyKey: kubernetes.io/hostname
+    {{- if .Values.cluster.features.oidc }}
+    extraEnvVars:
+      - name: OIDC_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: harbor-oidc-secret
+            key: clientSecret
+      - name: CONFIG_OVERWRITE_JSON
+        value: |
+          {
+            "auth_mode": "oidc_auth",
+            "oidc_name": "Authentik",
+            "oidc_endpoint": "https://authentik.{{ .Values.cluster.domain }}/application/o/harbor/",
+            "oidc_client_id": "harbor",
+            "oidc_client_secret": "$(OIDC_CLIENT_SECRET)",
+            "oidc_groups_claim": "groups",
+            "oidc_admin_group": "harbor-admin",
+            "oidc_scope": "openid,profile,email,groups",
+            "oidc_auto_onboard": "true",
+            "oidc_user_claim": "preferred_username"
+          }
+    {{- end }}
+
+  portal:
+    replicas: 2
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: harbor
+                  component: portal
+              topologyKey: kubernetes.io/hostname
+
+  registry:
+    replicas: 2
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: harbor
+                  component: registry
+              topologyKey: kubernetes.io/hostname
+
+  jobservice:
+    replicas: 2
+    jobLoggers:
+      - database   # was [file] → DB logging drops the RWO jobLog PVC, so jobservice can replicate
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: harbor
+                  component: jobservice
+              topologyKey: kubernetes.io/hostname
+  # Chart default request 512Mi; p95 ~85Mi, scans peak ~200Mi.
+  trivy:
+    resources:
+      requests:
+        memory: 256Mi

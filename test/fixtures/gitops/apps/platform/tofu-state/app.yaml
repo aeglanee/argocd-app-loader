@@ -1,0 +1,7 @@
+project: platform
+wave: -4                  # after the CNPG operator (-5); up well before the laptop runs openbao-config
+namespace: tofu-state
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+  - SkipDryRunOnMissingResource=true   # CNPG Cluster CRD comes from the operator one wave earlier

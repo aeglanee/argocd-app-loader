@@ -1,0 +1,91 @@
+# =============================================================================
+# Forgejo — Gitea-compatible forge (GPLv3 community fork), and its CI via Forgejo Actions
+# (runner: administration/forgejo-runner). The chart keeps the `gitea:` config key from its Gitea
+# heritage; it bundles no DB/cache subcharts, so we just point at CNPG + memory.
+# =============================================================================
+chart:
+  # Single replica on one RWO PVC: the leveldb queue takes a file lock, so a
+  # rolling update (two pods on /data) deadlocks. Recreate = old goes first.
+  strategy:
+    type: Recreate
+
+  gitea:
+    admin:
+      existingSecret: forgejo-admin-secret
+
+    config:
+      database:
+        DB_TYPE: postgres
+        HOST: forgejo-postgres-rw.forgejo.svc.cluster.local:5432
+        NAME: forgejo
+        USER: forgejo
+      cache:
+        ADAPTER: memory
+      server:
+        DOMAIN: forgejo.{{ .Values.cluster.domain }}
+        ROOT_URL: https://forgejo.{{ .Values.cluster.domain }}
+        {{- if .Values.cluster.forgejoSshExposed | default false }}
+        # Advertised clone URL → git@forgejo.<domain>:22 (LB shares the gateway IP on :22).
+        SSH_DOMAIN: forgejo.{{ .Values.cluster.domain }}
+        SSH_PORT: 22
+        {{- end }}
+      actions:
+        # Forgejo Actions — THE CI (since 2026-09-26; replaced Woodpecker + the GitLab trial): workflows in
+        # .forgejo/workflows/, jobs run as k8s pods via administration/forgejo-runner (runner +
+        # the k8s backend plugin). Also serves the per-job OIDC ID tokens OpenBao trusts
+        # (issuer https://forgejo.<domain>/api/actions).
+        ENABLED: true
+      service:
+        ALLOW_ONLY_EXTERNAL_REGISTRATION: false
+        SHOW_REGISTRATION_BUTTON: false
+        REGISTER_EMAIL_CONFIRM: false
+        ENABLE_NOTIFY_MAIL: false
+      {{- if .Values.cluster.features.oidc }}
+      oauth2_client:
+        ENABLE_AUTO_REGISTRATION: true
+        ACCOUNT_LINKING: auto
+        USERNAME: preferred_username
+      {{- end }}
+
+    # DB password from the CNPG-generated secret (Forgejo honours GITEA__* envs).
+    additionalConfigFromEnvs:
+      - name: GITEA__DATABASE__PASSWD
+        valueFrom:
+          secretKeyRef:
+            name: forgejo-postgres-app
+            key: password
+
+    {{- if .Values.cluster.features.oidc }}
+    oauth:
+      - name: authentik
+        provider: openidConnect
+        existingSecret: forgejo-oidc-secret
+        autoDiscoverUrl: https://authentik.{{ .Values.cluster.domain }}/application/o/forgejo/.well-known/openid-configuration
+        # One comma-separated string: the chart quotes each oauth key into a CLI flag, so a YAML
+        # list became the single scope "[openid profile email groups]" and no groups claim came back.
+        scopes: openid,profile,email,groups
+        groupClaimName: groups
+        adminGroup: forgejo-admin
+    {{- end }}
+
+  {{- if .Values.cluster.forgejoSshExposed | default false }}
+  # SSH exposed on the shared gateway IP (.10:22) — matches the cilium Gateway's
+  # lb-ipam-sharing-key. (Mounting the OpenBao stable host key into the SSH server is the
+  # remaining follow-up; forgejo's auto-generated /data key is used until then.)
+  service:
+    ssh:
+      type: LoadBalancer
+      port: 22
+      annotations:
+        io.cilium/lb-ipam-ips: {{ .Values.cluster.network.gatewayIp | quote }}
+        io.cilium/lb-ipam-sharing-key: {{ .Values.cluster.network.gatewaySharingKey | quote }}
+        io.cilium/lb-ipam-sharing-cross-namespace: "*"   # gateway is in kube-system
+  {{- end }}
+
+  ingress:
+    enabled: false
+
+  priorityClassName: {{ .Values.cluster.priorityClasses.critical }}   # the GitOps source Argo pulls from
+  resources:
+    requests:
+      memory: 320Mi

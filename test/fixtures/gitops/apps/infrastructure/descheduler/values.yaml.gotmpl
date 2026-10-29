@@ -1,0 +1,54 @@
+# =============================================================================
+# Rebalancing after drains. Pods never move back once a node is uncordoned, so after a server-c
+# drain server-a/b stay overfull (requests ~99%) and replacements can't be placed (2026-10-24).
+# Deliberately narrow: only LowNodeUtilization, only stateless default-priority pods.
+# =============================================================================
+chart:
+  kind: CronJob
+  schedule: "*/10 * * * *"
+  cmdOptions:
+    v: 3
+    # No --dry-run: since 0.35 dry-run plans against an empty cached copy of the cluster (sees 0 pods
+    # per node; kubernetes-sigs/descheduler#1917), so it can't validate anything.
+
+  resources:
+    requests:
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+  deschedulerPolicy:
+    maxNoOfPodsToEvictPerNode: 2   # gradual, never a burst
+    profiles:
+      - name: rebalance
+        pluginConfig:
+          - name: DefaultEvictor
+            args:
+              nodeFit: true                  # only evict if the pod fits elsewhere → never strands it Pending
+              priorityThreshold:             # only pods BELOW this class: stateless apps + batch
+                name: {{ .Values.cluster.priorityClasses.stateful }}
+              podProtections:
+                defaultDisabled:
+                  - PodsWithLocalStorage     # emptyDir is scratch space; most stateless apps have one
+                extraEnabled:
+                  - PodsWithPVC              # stateful pods never move
+          - name: LowNodeUtilization
+            args:
+              # Absolute bands tuned to this cluster (~90% requested overall). A ±% band around the
+              # mean can't separate nodes near 100% (after a drain: 99/99/86 → mean 95, nothing
+              # "under"). Under 90% = can take pods; over 97% = should give some. Steady state
+              # (~84/96/92) has nothing over 97 → idle.
+              thresholds:
+                memory: 90
+              targetThresholds:
+                memory: 97
+              evictableNamespaces:
+                exclude:
+                  - kube-system
+                  - longhorn-system
+                  - system-upgrade
+                  - forgejo-runner          # running CI jobs
+        plugins:
+          balance:
+            enabled:
+              - LowNodeUtilization

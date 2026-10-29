@@ -1,0 +1,6 @@
+project: infrastructure
+wave: -5                  # after the CNI/foundation; reapply loop handles per-boot
+namespace: node-power-tuning
+createNamespace: false    # namespace.yaml sets privileged PSA (DaemonSet needs it)
+syncOptions:
+  - ServerSideApply=true

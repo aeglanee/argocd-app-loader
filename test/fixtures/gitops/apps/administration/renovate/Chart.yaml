@@ -1,0 +1,9 @@
+apiVersion: v2
+name: renovate
+description: >-
+  Wrapper around Renovate — an isolated dependency bot (CronJob in its own namespace, broad
+  egress, no ingress). Opens PRs against the Forgejo homelab repo per the policy in the repo's
+  renovate.json. Token = providers/forgejo-renovate (terraform/forgejo → ESO).
+type: application
+version: 0.1.0
+appVersion: "43.219.0"

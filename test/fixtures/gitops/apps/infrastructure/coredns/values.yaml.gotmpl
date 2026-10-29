@@ -1,0 +1,53 @@
+# =============================================================================
+# Cluster DNS (kube-dns) — the coredns/coredns chart deployed as THE cluster
+# resolver. Service ClusterIP MUST equal the kubelet clusterDNS (10.96.0.10).
+# Talos's built-in CoreDNS is disabled; this replaces it. The LAN-authoritative
+# side (*.irkalla.eu) is the dns app (front + BIND), not this.
+# =============================================================================
+chart:
+  isClusterService: true
+  replicaCount: 2
+  service:
+    clusterIP: 10.96.0.10
+  servers:
+    - zones:
+        - zone: .
+          use_tcp: true
+      port: 53
+      plugins:
+        - name: errors
+        - name: health
+          configBlock: |-
+            lameduck 5s
+        - name: ready
+        - name: kubernetes
+          parameters: cluster.local in-addr.arpa ip6.arpa
+          configBlock: |-
+            pods insecure
+            fallthrough in-addr.arpa ip6.arpa
+            ttl 30
+        - name: prometheus
+          parameters: 0.0.0.0:9153
+        - name: forward
+          parameters: ". {{ range $i, $u := .Values.cluster.network.dnsUpstreams }}{{ if $i }} {{ end }}{{ $u }}{{ end }}"
+        - name: cache
+          parameters: 30
+        - name: loop
+        - name: reload
+        - name: loadbalance
+    {{- if .Values.cluster.apps.dns | default false }}
+    # Pods resolve *.{{ .Values.cluster.domain }} through the LAN DNS front on coreDnsIp
+    # (dns app), like every LAN client. Enabled with the dns app.
+    - zones:
+        - zone: {{ .Values.cluster.domain }}
+          use_tcp: true
+      port: 53
+      plugins:
+        - name: errors
+        - name: cache
+          parameters: 30
+        - name: forward
+          parameters: ". {{ .Values.cluster.network.coreDnsIp }}"
+    {{- end }}
+
+  priorityClassName: system-cluster-critical   # cluster DNS — the standard class for it

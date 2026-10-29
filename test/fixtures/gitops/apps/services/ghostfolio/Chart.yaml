@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ghostfolio
+description: >-
+  Wrapper around the ByTheHugo ghostfolio chart — CNPG-managed Postgres + OT-redis + ESO secrets +
+  HTTPRoute. Vanilla Ghostfolio; AI lives outside via ghostfolio-mcp.
+type: application
+version: 0.1.0
+appVersion: "3.49.0"
+# No `dependencies:` — the upstream ByTheHugo chart is git-sourced via app.yaml `chart.git`
+# (loader v2), not a helm-repo subchart. ByTheHugo deleted its .tgz releases so the helm-repo
+# path 404s; the git source (tag ghostfolio-0.5.4, path chart/) is intact.

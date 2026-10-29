@@ -1,0 +1,13 @@
+# helm-charts-oci-proxy (container-registry/8gears) — presents HTTP Helm repos as OCI on the
+# front. Sits BEHIND Harbor: the "shim-proxy" proxy-cache (terraform/harbor) pulls from this
+# ClusterIP service, so Harbor stays the single front door. In-memory cache, no PVC. Only
+# exercised when cluster.mirrors.via.shim is enabled (http charts route harbor → shim → upstream).
+chart:
+  fullnameOverride: chart-proxy
+  image:
+    pullPolicy: IfNotPresent   # TODO pin to a digest — the chart's default tag is floating "latest"
+  service:
+    type: ClusterIP
+    port: 9000
+  ingress:
+    enabled: false

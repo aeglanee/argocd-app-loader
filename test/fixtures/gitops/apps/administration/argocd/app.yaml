@@ -1,0 +1,10 @@
+project: administration
+wave: -25
+namespace: argocd
+releaseName: argocd
+syncOptions:
+  - ServerSideApply=true
+chart:
+  name: argo-cd
+  version: "10.11.6"
+  repo: oci://ghcr.io/argoproj/argo-helm

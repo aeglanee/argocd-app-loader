@@ -1,0 +1,11 @@
+project: administration
+wave: 12                  # after forgejo (10); needs the forgejo-ci token in OpenBao
+namespace: renovate
+createNamespace: false   # we template the namespace ourselves (PSA labels + isolation)
+releaseName: renovate
+syncOptions:
+  - ServerSideApply=true
+chart:
+  name: renovate
+  version: "46.387.1"
+  repo: oci://ghcr.io/renovatebot/charts

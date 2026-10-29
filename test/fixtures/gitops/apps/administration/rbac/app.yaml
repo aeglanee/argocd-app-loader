@@ -1,0 +1,11 @@
+# Pure metadata — read by the umbrella loader, NOT passed to Helm.
+# Cluster-wide OIDC RBAC: the Authentik group → ClusterRole bindings the kube-apiserver
+# (Talos OIDC config) and the impersonating dashboards (Radar) both rely on. Local
+# templates only, no upstream chart. Lives in its own app so no single dashboard owns a
+# binding every other consumer depends on (it used to live in headlamp).
+project: administration
+wave: 5                   # before the dashboards (12); needs nothing but the apiserver
+namespace: argocd         # cluster-scoped resources; this is just the app's home ns
+createNamespace: false
+syncOptions:
+  - ServerSideApply=true

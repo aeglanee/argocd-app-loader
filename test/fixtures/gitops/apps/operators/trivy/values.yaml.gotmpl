@@ -1,0 +1,10 @@
+# =============================================================================
+# Values for the upstream trivy-operator subchart
+# Currently disabled at the cluster level (global.apps.trivy: false) — keep
+# the wrapper around so it can be flipped on without code changes.
+# =============================================================================
+trivy-operator:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack

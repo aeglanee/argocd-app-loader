@@ -1,0 +1,6 @@
+# Memory request added where a container declares none (median of those containers: ~30Mi).
+# Sizing method: docs/OPERATIONS.md § Memory requests & priority.
+defaultMemoryRequest: 32Mi
+# Longhorn instance-managers: request only, NEVER a limit (killing one kills every volume on the
+# node). Safe because Longhorn runs them at system-node-critical (longhorn values).
+instanceManagerMemoryRequest: 768Mi

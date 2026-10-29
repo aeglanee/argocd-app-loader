@@ -343,13 +343,15 @@ from one of:
 ## Development
 
 Tools: [Helm 4](https://helm.sh/docs/intro/install/) (Argo CD 3.5+ renders with Helm 4) with the
-[helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin, and
-[pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all three.
+[helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin, [Task](https://taskfile.dev/)
+and [pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all of them.
 
 ```sh
 nix develop -c pre-commit install   # once; hooks then run on every commit
-nix develop -c pre-commit run --all-files
+nix develop -c task check           # lint + golden renders, as CI runs them
 ```
+
+A loader change that alters output fails `task check`; see [test/README.md](test/README.md).
 
 ## Status
 

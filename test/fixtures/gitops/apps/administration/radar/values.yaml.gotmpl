@@ -1,0 +1,103 @@
+# =============================================================================
+# Values for the upstream radar chart (loader chart.http source → Harbor shim when airgapped).
+# Kubernetes dashboard with Authentik OIDC. IMPERSONATION model (unlike headlamp's passthrough):
+# Radar runs the OIDC login itself, then calls the apiserver as its ServiceAccount with
+# Impersonate-User/Group = the token's `sub` + groups. Reads come from an SA-populated cache
+# re-checked per user (SubjectAccessReview); writes/exec/logs run as the impersonated user.
+# So: the apiserver needs NO OIDC change for Radar, and the user's rights come from the
+# administration/rbac group bindings (k8s-admin → cluster-admin, k8s-viewer → view).
+# =============================================================================
+chart:
+  fullnameOverride: radar
+
+  ingress:
+    enabled: false            # exposed via our own HTTPRoute (templates/httproute.yaml)
+  httpRoute:
+    enabled: false
+
+  # Restricted PSA: the chart already drops caps / non-root / RO rootfs; only seccomp is missing.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Ephemeral-debug image (terminal "Debug" tab). Default is busybox:latest — pinned instead
+  # (no floating tags; also the tag that gets mirrored through Harbor when image-airgapped).
+  debug:
+    image: docker.io/library/busybox:1.38.0
+
+  rbac:
+    podLogs: true
+    podExec: true             # impersonated → the USER's RBAC decides, not the SA's
+    portForward: false
+    traffic: true             # Hubble: reads only kube-system/hubble-relay-client-certs, dials hubble-relay directly
+    metrics: true             # harmless without metrics-server (no metrics.k8s.io here); VM is auto-discovered for history
+    helm: false               # ArgoCD renders charts — there are no Helm release Secrets to manage
+    viewRBAC: true
+    viewWebhooks: true
+    # Operators here that aren't in the chart's built-in crdGroups list (RBAC has no apiGroup
+    # wildcards, so each group is named). The built-ins already cover cilium, cnpg, cert-manager,
+    # external-secrets, gateway-api, argo, prometheus(-operator CRDs), trivy.
+    additionalCrdGroups:
+      - longhorn.io
+      - operator.victoriametrics.com
+      - redis.redis.opstreelabs.in
+      - deuxfleurs.fr
+
+  # Event timeline persisted in a CNPG Postgres (templates/postgres.yaml). CNPG writes the
+  # app-user DSN to <cluster>-app (key `uri`, no sslmode — pgx defaults to prefer, fine with
+  # CNPG's self-signed cert). Single replica stays mandatory (informer cache is per-pod).
+  timeline:
+    storage: postgres
+    retention: 168h
+    postgres:
+      existingSecret: radar-postgres-app
+      secretKey: uri
+  persistence:
+    enabled: false
+
+  # ArgoCD GitOps deep-diff (git-rendered desired vs live). Read-only ArgoCD API token minted by
+  # terraform/argocd → OpenBao apps/radar/argocd → ESO (templates/radar-argocd-secret.yaml).
+  # argocd.url left empty = auto-discover the in-cluster argocd-server.
+  argocd:
+    existingSecret: radar-argocd
+    existingSecretKey: token
+
+  # Prometheus-compatible history source for workload metrics/traffic. Radar auto-discovers
+  # VictoriaMetrics; pinned anyway so it never has to guess.
+  traffic:
+    prometheusUrl: http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428
+
+  mcp:
+    enabled: true             # /mcp sits behind the same session auth as the UI
+
+{{- if .Values.cluster.features.oidc }}
+  auth:
+    mode: oidc
+    # Session-cookie HMAC. Empty = regenerated on every pod restart (all sessions dropped) →
+    # pinned in OpenBao providers/radar → ESO → radar-session (templates/radar-session-secret.yaml).
+    existingSecret: radar-session
+    existingSecretKey: auth-secret
+    cookieTTL: "12h"          # sliding; OIDC is only the login step, no refresh-token dance
+    oidc:
+      issuerURL: https://authentik.{{ .Values.cluster.domain }}/application/o/radar/
+      clientID: radar
+      existingSecret: radar-oidc          # key `client-secret` (templates/radar-oidc-secret.yaml)
+      clientSecretKey: client-secret
+      redirectURL: https://radar.{{ .Values.cluster.domain }}/auth/callback
+      postLogoutRedirectURL: https://radar.{{ .Values.cluster.domain }}/
+      groupsClaim: groups
+      # `sub`, NOT email — same claim + prefix as the apiserver's own OIDC users (talconfig
+      # oidc-username-claim/prefix). Authentik doesn't assert email_verified, and Radar ≥1.18
+      # refuses unverified emails as usernames. RBAC is group-based, so the username is cosmetic.
+      usernameClaim: sub
+      scopes: ["openid", "profile", "groups"]
+      # Impersonated identities read `oidc:<sub>` in audit logs and can't collide with SA/system
+      # names. Groups stay unprefixed → matches administration/rbac's bindings.
+      usernamePrefix: "oidc:"
+      groupsPrefix: ""
+      enablePKCE: true
+{{- end }}

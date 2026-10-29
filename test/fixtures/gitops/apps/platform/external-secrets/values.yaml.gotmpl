@@ -1,0 +1,22 @@
+# =============================================================================
+# Values for the upstream external-secrets subchart
+# =============================================================================
+chart:
+  installCRDs: true
+  replicaCount: 1
+  priorityClassName: {{ .Values.cluster.priorityClasses.critical }}
+  resources:
+    requests:
+      memory: 64Mi
+  webhook:
+    replicaCount: 1
+    priorityClassName: {{ .Values.cluster.priorityClasses.critical }}
+    resources:
+      requests:
+        memory: 48Mi
+  certController:
+    replicaCount: 1
+    priorityClassName: {{ .Values.cluster.priorityClasses.critical }}
+    resources:
+      requests:
+        memory: 64Mi

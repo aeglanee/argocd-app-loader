@@ -1,0 +1,64 @@
+# =============================================================================
+# Values for the upstream OpenBao subchart — single node, file storage on a
+# Longhorn PVC. Init + unseal are driven by our own Job + CronJob (templates/),
+# which also do the minimal kv/k8s-auth/ESO-role config so ESO works at
+# bootstrap (full day-2 policy + secret seeding → Terraform later).
+# =============================================================================
+chart:
+  global:
+    tlsDisable: true
+
+  injector:
+    enabled: false        # we use ESO, not the agent injector
+
+  server:
+    # Pin 2.6.x: 2.7.0 removed the `file` storage backend (chart 0.30.x defaults
+    # to 2.7). Unpin only after migrating storage to raft/pebbledb.
+    image:
+      tag: "2.6.4"
+
+    priorityClassName: {{ .Values.cluster.priorityClasses.critical }}
+
+    # OpenBao validates k8s SA tokens (for the kubernetes auth method) via
+    # TokenReview — needs the auth-delegator ClusterRole.
+    authDelegator:
+      enabled: true
+
+    standalone:
+      enabled: true
+      config: |
+        ui = true
+        listener "tcp" {
+          tls_disable     = 1
+          address         = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+        storage "file" {
+          path = "/openbao/data"
+        }
+        # No service_registration — that needs HA storage (raft); file storage is
+        # single-node. The chart's Service selects the pod by label regardless.
+
+    ha:
+      enabled: false
+
+    dataStorage:
+      enabled: true
+      size: 5Gi
+      storageClass: longhorn
+
+    auditStorage:
+      enabled: false
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+    readinessProbe:
+      enabled: true
+      path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+
+  ui:
+    enabled: true
+    serviceType: ClusterIP

@@ -1,0 +1,94 @@
+# =============================================================================
+# Values for the upstream cilium subchart — keyed by dependency name "cilium"
+# Anything here is passed to https://helm.cilium.io/ chart 1.19.1 as-is.
+# String fields with template directives are tpl-rendered by the
+# argocd-app-loader against the cluster .Values, so .Values.cluster.* resolves.
+# =============================================================================
+chart:
+  # KubePrism — Talos's per-node API loadbalancer on localhost:7445. Cilium
+  # reaches the API locally before pod networking exists, with no dependency on
+  # the VIP. (This is THE Talos-specific Cilium setting.)
+  k8sServiceHost: localhost
+  k8sServicePort: 7445
+  kubeProxyReplacement: true
+  # Roll ONE node at a time (chart default is 2). A DaemonSet has no surge, so an
+  # update tears down the old agent before the new one pulls — with maxUnavailable=2
+  # a bad/slow pull strands the CNI on a majority of nodes at once (the deadlock that
+  # hit us twice). maxUnavailable=1 keeps 2/3 nodes networked throughout the roll.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  # cilium-envoy serves the Gateway dataplane (Harbor's OWN ingress at .10), so one-at-a-time
+  # matters even MORE here: a 2-node envoy roll that can't pull its image takes down the gateway
+  # → Harbor unreachable → can't pull the image = the deadlock, amplified. Chart default is
+  # maxUnavailable:2 — pin to 1 so 2/3 gateway nodes stay up throughout the roll.
+  envoy:
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+  # Talos specifics (REQUIRED): cgroup v2 isn't auto-mounted on Talos's
+  # read-only rootfs, and Talos runs a tighter capability profile (no
+  # SYS_MODULE — workloads can't load kernel modules).
+  cgroup:
+    autoMount:
+      enabled: false
+    hostRoot: /sys/fs/cgroup
+  securityContext:
+    capabilities:
+      ciliumAgent: [CHOWN, KILL, NET_ADMIN, NET_RAW, IPC_LOCK, SYS_ADMIN, SYS_RESOURCE, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+      cleanCiliumState: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]
+  bpf:
+    masquerade: true
+  enableIPv4Masquerade: true
+  devices: "enp+"
+  # Memory requests (p95): an unrequested DaemonSet makes every node look emptier than it is.
+  resources:
+    requests:
+      memory: 448Mi
+  operator:
+    replicas: 2          # HA on 3 nodes, ~free
+    resources:
+      requests:
+        memory: 128Mi
+  l2announcements:
+    enabled: true
+  externalIPs:
+    enabled: true
+  k8sClientRateLimit:
+    qps: 50
+    burst: 200
+  # Transparent pod-to-pod encryption between nodes (in-kernel, auto key rotation).
+  encryption:
+    enabled: true
+    type: wireguard
+  # Network-policy lockdown — see docs/NETWORK-POLICY.md. policyAuditMode logs would-be
+  # policy drops as Hubble AUDIT verdicts WITHOUT dropping; it is ON whenever the lockdown
+  # is enabled but not yet enforcing. Flip features.networkPolicy.enforce=true to ENFORCE.
+  # hostFirewall polices the nodes too (host CCNPs) — safe in audit; enforce that wave LAST.
+  # NOTE: changing these rolls the cilium-agent DaemonSet (config read at startup).
+  policyAuditMode: {{ and .Values.cluster.features.networkPolicy.enabled (not .Values.cluster.features.networkPolicy.enforce) }}
+  hostFirewall:
+    enabled: {{ and .Values.cluster.features.networkPolicy.enabled .Values.cluster.features.networkPolicy.hostFirewall }}
+  # Cilium IS the ingress, via Gateway API. Requires the Gateway API CRDs first;
+  # flipped on with features.gateway.enabled during the Gateway-API/HTTPRoute pass.
+  gatewayAPI:
+    enabled: {{ .Values.cluster.features.gateway.enabled | default false }}
+  hubble:
+    enabled: true
+    relay:
+      enabled: true
+    ui:
+      enabled: true
+  ipam:
+    operator:
+      clusterPoolIPv4PodCIDRList:
+        - "{{ .Values.cluster.network.podCIDR }}"
+
+# =============================================================================
+# Values for OUR OWN templates/ (not passed to the upstream chart)
+# =============================================================================
+loadBalancerPool:
+  start: "{{ .Values.cluster.network.lbPoolStart }}"
+  stop:  "{{ .Values.cluster.network.lbPoolStop }}"

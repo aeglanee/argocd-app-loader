@@ -1,0 +1,19 @@
+# =============================================================================
+# Values for the upstream cert-manager subchart
+# =============================================================================
+chart:
+  installCRDs: true
+  extraArgs:
+    - --dns01-recursive-nameservers-only
+    - --dns01-recursive-nameservers={{ range $i, $ip := .Values.cluster.network.dnsUpstreams }}{{ if $i }},{{ end }}{{ $ip }}:53{{ end }}
+
+# =============================================================================
+# Values for OUR OWN templates/ (ClusterIssuer, OVH credentials)
+# =============================================================================
+  cainjector:
+    resources:
+      requests:
+        memory: 112Mi
+
+certManager:
+  email: "{{ .Values.cluster.adminEmail }}"

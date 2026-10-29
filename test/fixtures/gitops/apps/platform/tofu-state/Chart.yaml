@@ -1,0 +1,10 @@
+apiVersion: v2
+name: tofu-state
+description: >-
+  CNPG Postgres holding centralized OpenTofu remote state — one database,
+  a schema per module (openbao_config, authentik, forgejo, nexus…). Backend for
+  the laptop-run openbao-config and future CI-run modules. Local templates only,
+  no upstream chart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

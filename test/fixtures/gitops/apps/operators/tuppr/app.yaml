@@ -1,0 +1,11 @@
+project: operators
+wave: 15                   # leaf: upgrades nodes, nothing depends on it
+namespace: system-upgrade  # must match kubernetesTalosAPIAccess.allowedKubernetesNamespaces (talconfig.yaml)
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+  - SkipDryRunOnMissingResource=true   # the CRs below need the chart's CRDs first
+chart:
+  name: tuppr
+  version: "0.5.10"
+  repo: oci://ghcr.io/home-operations/charts

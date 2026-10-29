@@ -1,0 +1,8 @@
+project: platform
+wave: 0                   # no hard deps (networking only); idle until cluster.mirrors.via.shim is enabled
+namespace: chart-proxy
+createNamespace: true
+chart:
+  name: helm-charts-oci-proxy
+  version: "2.0.1"
+  repo: oci://8gears.container-registry.com/library

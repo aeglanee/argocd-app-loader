@@ -1,0 +1,24 @@
+---
+# Golden renders: every fixture is rendered against THIS checkout of the loader and committed under
+# test/golden/. A change to the loader shows up as a diff of the real output; review it, then commit.
+version: "3"
+
+tasks:
+  golden:
+    desc: Render the fixtures into test/golden/
+    cmds:
+      - for:
+          - examples/consumer
+          - test/fixtures/gitops
+        cmd: rm -rf {{.ITEM}}/charts {{.ITEM}}/Chart.lock && helm dependency build {{.ITEM}} >/dev/null
+      - helm template cluster examples/consumer --namespace argocd > test/golden/example.yaml
+      - >-
+        helm template cluster test/fixtures/gitops --namespace argocd
+        -f test/fixtures/gitops/cluster-values.yaml > test/golden/gitops.yaml
+
+  check:
+    desc: Lint the chart and fail if a render differs from its committed golden file
+    cmds:
+      - helm lint .
+      - task: golden
+      - git diff --exit-code -- test/golden

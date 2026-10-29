@@ -1,0 +1,183 @@
+# =============================================================================
+# DEFAULTS — every key the chart and its apps read, with neutral values. An instance repo
+# (e.g. homelab's cluster-values.yaml) overrides them; the root app layers that file on top
+# (templates/root-app.yaml). Keep the instance's real values out of this file.
+# =============================================================================
+cluster:
+  name: example # cluster identity (external-dns record owner id)
+  domain: example.com
+  adminEmail: admin@example.com
+  adminUser: admin
+  clusterServer: https://kubernetes.default.svc
+  argocdNamespace: argocd
+  targetRevision: HEAD
+  repoBasePath: "" # the chart sits at the repo root
+  network:
+    apiServer: "192.0.2.6" # VIP (kube-apiserver); cilium uses KubePrism instead
+    apiPort: 6443
+    lbPoolStart: "192.0.2.10"
+    lbPoolStop: "192.0.2.30"
+    coreDnsIp: "192.0.2.20" # the LAN DNS front (dns app): the router hands it out, the nodes resolve via it
+    dnsStoreIp: "10.96.0.53" # BIND (the domain zone external-dns writes); ClusterIP, the DNS front forwards to it
+    gatewayIp: "192.0.2.10" # shared Cilium Gateway (HTTPRoutes attach here) — from the LB pool
+    # Cilium LB-IPAM sharing key for every LoadBalancer that shares gatewayIp (the gateway :80/:443,
+    # forgejo SSH :22). All sharers MUST carry the same key. The value is
+    # historical — renaming it on the live gateway Service risks an IP reshuffle (= HTTPS outage).
+    gatewaySharingKey: "gateway"
+    podCIDR: "10.244.0.0/16" # Talos default (verified live)
+    dnsUpstreams: ["1.1.1.1", "8.8.8.8"]
+  # Airgap toggles
+  # THIS repo only (every app's local chart + the root app) ← in-cluster Forgejo (localGitRepo).
+  # Upstream git charts are cluster.mirrors.via.forgejo. false = cold-start / forgejo-down
+  # break-glass (recovery 2026-06-20 resolved; see docs/AIRGAP.md)
+  useLocalGit: false
+  githubUser: example
+  forgejoUser: example
+  # Forgejo's local accounts. Names only, not secret; their passwords are generated into OpenBao
+  # (kv/providers/forgejo, kv/providers/forgejo-mirror). The email is tpl-rendered by its consumer.
+  forgejoAdminUser: forgejo_admin
+  forgejoAdminEmail: "forgejo-admin@{{ .Values.cluster.domain }}"
+  forgejoMirrorUser: mirror-bot
+  remoteGitRepo: "https://github.com/{{ .Values.cluster.githubUser }}/gitops.git"
+  # In-cluster HTTP — must match the `forgejo-repo` ArgoCD repository Secret's url so ArgoCD
+  # uses that credential (read token). NOT the public/SSH URL: ArgoCD's repo-server is in-cluster.
+  localGitRepo: "http://forgejo-http.forgejo.svc:3000/{{ .Values.cluster.forgejoUser }}/gitops"
+  # The instance repo whose values file the root app layers on top of these defaults
+  # (templates/root-app.yaml). Follows useLocalGit like the repo above.
+  instanceRemoteRepo: "https://github.com/{{ .Values.cluster.githubUser }}/homelab.git"
+  instanceLocalRepo: "http://forgejo-http.forgejo.svc:3000/{{ .Values.cluster.forgejoUser }}/homelab"
+  instanceRevision: HEAD
+  instanceValuesFile: cluster-values.yaml
+  # Expose Forgejo's built-in SSH server (pod :2222) via a LoadBalancer that SHARES the
+  # gateway IP (.10) on port 22 — for your own git-over-SSH pushes. Same A-record as HTTPS
+  # (no DNS split). Also un-gates the stable SSH host-key ExternalSecret (seeded in OpenBao).
+  forgejoSshExposed: false
+  # Stable SSH host key from OpenBao vs forgejo's auto-gen /data key. OFF: not worth it — only
+  # external SSH clients (you/Claude) see the host key; ArgoCD/CI/Renovate use in-cluster HTTP.
+  # Flipping this also needs the chart mount wired (else the ExternalSecret's secret is unused).
+  forgejoSshStaticHostKey: false
+  # ---------------------------------------------------------------------------
+  # MIRRORS — chart + git airgap (loader >=0.8). Every app declares its REAL upstream in
+  # app.yaml chart.repo; this block decides whether it is pulled through a local mirror. A
+  # source goes private ONLY when (1) its method below is enabled, (2) a table key matches
+  # (longest scheme-less prefix, whole path segments), and (3) the app has not set
+  # chart.mirror: false. Otherwise it is pulled from the public upstream as written — a
+  # missing entry is always safe (cold-start rule). See docs/AIRGAP.md.
+  # ---------------------------------------------------------------------------
+  mirrors:
+    via:
+      # OCI chart → <host>/<project>/<path-after-key>. Projects are Harbor proxy-caches
+      # created by terraform/harbor registries[*] (as `<key>-proxy`) — names must match.
+      # false = cold-start / Harbor-down.
+      harbor:
+        enabled: false
+        host: "harbor.{{ .Values.cluster.domain }}"
+      # HTTP-only Helm repo → <host>/<project>/<repo-host+path>: Harbor proxy-caches the
+      # helm-charts-oci-proxy shim (platform/chart-proxy), which serves the repo as OCI.
+      # host defaults to via.harbor.host; project = terraform/harbor registries["shim"].
+      shim:
+        enabled: false
+        project: shim-proxy
+      # git chart / git source → <base>/<repo>: pull-mirrors owned by the local `mirror-bot`
+      # Forgejo account (created by `task forgejo-mirrors` from the forgejo entries below;
+      # ArgoCD reads them via the forgejo-mirror-creds repo-creds template). Only add an entry
+      # AFTER the task has created the mirror (else the chart 404s).
+      forgejo:
+        enabled: false
+        base: "http://forgejo-http.forgejo.svc:3000/mirror-bot"
+    table: {}
+  tls:
+    clusterIssuer: letsencrypt
+  # ---------------------------------------------------------------------------
+  # PRIORITY CLASSES — names of the classes in infrastructure/priority-classes.
+  # Membership rule + sizing method: docs/OPERATIONS.md § Memory requests & priority.
+  # ---------------------------------------------------------------------------
+  priorityClasses:
+    critical: platform-critical # DNS, secrets, GitOps — what takes other apps down with it
+    stateful: platform-stateful # replicated stateful members (Postgres, Garage, Redis): preempted after stateless apps
+    batch: batch-low # throwaway CI builds: evicted first, never preempt
+  # ---------------------------------------------------------------------------
+  # APP TOGGLES — single source of truth for what's deployed
+  # Read by argocd-app-loader; cascades into every wrapper as
+  # .Values.cluster.apps.<name> (bool) so wrappers can branch on whether
+  # peer apps are enabled.
+  # ---------------------------------------------------------------------------
+  apps:
+    # --- Stage-1 foundation (ON) — ArgoCD adopts the seed-installed ones ---
+    argocd: false
+    cilium: false
+    # Gateway API CRDs (wave -30). No chart ships them and cilium requires them pre-installed, so
+    # they need their own day-2 owner — see the app.yaml header (outage 2026-08-02).
+    gateway-api-crds: false
+    # PriorityClasses (wave -28). Not a real switch: apps reference the classes unconditionally; the
+    # classes carry Prune/Delete=false so turning this off leaves them in place
+    priority-classes: false
+    admission-policies: false # built-in MutatingAdmissionPolicies: default memory requests (wave -27)
+    descheduler: false # rebalances stateless pods after drains (LowNodeUtilization, deviation from mean)
+    network-policies: false # cluster-wide default-deny + baselines (gated further by features.networkPolicy)
+    coredns: false
+    kubelet-serving-cert-approver: false # approves kubelet serving-cert CSRs (Talos rotate-server-certificates) → metrics-server verifies kubelet TLS
+    metrics-server: false # live metrics.k8s.io: HPAs, `kubectl top`, Radar live widgets
+    dns: false # LAN DNS front (CoreDNS) + BIND zone for the domain
+    external-dns: false # writes HTTPRoute / DNSEndpoint names into BIND (RFC2136)
+    longhorn: false # distributed block storage (replaces openebs)
+    node-power-tuning: false # per-node RAPL power caps + turbo (sheds heat) + powers off the unused dGPUs
+    openbao: false # secrets store (replaces vault)
+    external-secrets: false # ESO — syncs openbao → k8s Secrets
+    cert-manager: false
+    cert-manager-webhook-ovh: false
+    victoria-metrics-k8s-stack: false # metrics + node-exporter (thermals); VictoriaLogs+Vector (logs) come separately
+    grafana: false # standalone Grafana (own ns, Authentik OIDC) — extracted from the VM-stack subchart
+    victoria-logs: false # VictoriaLogs store + bundled Vector DaemonSet (logs half of observability)
+    cnpg: false # Postgres operator (every app's database)
+    tofu-state: false # CNPG Postgres for centralized OpenTofu remote state (pg backend)
+    redis-operator: false # OT-Container-Kit — backs Harbor's cache/jobservice queue
+    authentik: false # SSO/OIDC IdP. OIDC integrations are gated separately on features.oidc, so enabling this no longer touches forgejo/harbor.
+    forgejo: false # git forge (GPLv3 community fork of Gitea)
+    # cluster-wide OIDC group→ClusterRole bindings (k8s-admin→cluster-admin, k8s-viewer→view);
+    # consumed by the apiserver OIDC path AND radar's impersonation
+    rbac: false
+    forgejo-runner: false # Forgejo Actions runner (TRIAL): forgejo-runner + k8s backend plugin, pod per job, no DinD. Identity via `task forgejo-runner`
+    # k8s dashboard (own ns) — Authentik OIDC login + impersonation, CNPG-backed timeline, Hubble
+    # traffic, ArgoCD deep-diff. Replaced headlamp (retired 2026-09-22)
+    radar: false
+    harbor: false # container + OCI-chart registry (external CNPG + redis-operator)
+    chart-proxy: false # helm-charts-oci-proxy shim — serves HTTP Helm repos as OCI behind Harbor (chart airgap)
+    homepage: false # service dashboard (static links for now; airgapped chart via shim)
+    ghostfolio: false # wealth/portfolio tracker (CNPG pg + OT redis + ESO; Yahoo data source)
+    garage: false # shared S3 hub — Garage (RF=3, 1 pod/node, longhorn-local r1, own replication). Replaced MinIO
+    renovate: false # isolated dependency bot (CronJob, own ns) — auto-merge per renovate.json
+    # Talos + k8s upgrade controller (needs the kubernetesTalosAPIAccess patch in talconfig.yaml —
+    # its chart creates a talos.dev ServiceAccount)
+    tuppr: false
+    trivy: false
+  # ---------------------------------------------------------------------------
+  # PER-APP FEATURE FLAGS — granular toggles wrappers consume directly
+  # ---------------------------------------------------------------------------
+  features:
+    # Gateway/ingress exposure layer — Gateway API CRDs + cilium gatewayAPI +
+    # HTTPRoutes; gates all app exposure.
+    gateway:
+      enabled: true
+    # MASTER OIDC toggle — gates ALL app↔Authentik OIDC (forgejo, argocd, harbor, grafana, radar).
+    # The clients exist once Authentik's blueprint has applied (no CI involved); on before that,
+    # logins fail and Forgejo restarts on its OIDC discovery until they exist (docs/BOOTSTRAP.md).
+    oidc: true
+    # Network-policy lockdown (Cilium). See docs/NETWORK-POLICY.md. Two switches you
+    # turn ON in sequence, plus the host layer:
+    #   enabled      — master: arm cilium (audit) + deploy the network-policies app.
+    #   enforce      — false = AUDIT (log would-be drops as Hubble AUDIT verdicts, drop
+    #                  NOTHING); true = ENFORCE. Verify in audit, then flip to set.
+    #   hostFirewall — also police the nodes themselves (enable-host-firewall + host CCNPs).
+    #                  Safe to enable in audit; the CARE is the enforce step — host lockout is
+    #                  Talos-console recovery, not kubectl, so enforce the host wave LAST.
+    # Cold-bootstrap: start enabled:false → converge → enabled:true (audit) → verify →
+    # enforce:true. Git holds the steady state (enforce); bootstrap is the documented deviation.
+    networkPolicy:
+      # OFF 2026-06-30: gateway L7 (enforces even in audit) denied in-cluster/node HAIRPINS to
+      # harbor.irkalla.eu (chart+image pulls via the airgap public URL), breaking ArgoCD sync.
+      # Gateway L7 not fixable per-backend (#36509). Re-enable once Harbor is reached IN-CLUSTER
+      # (not via the gateway hairpin) — see docs/NETWORK-POLICY-BEHAVIOR.md.
+      enabled: false
+      enforce: false
+      hostFirewall: false

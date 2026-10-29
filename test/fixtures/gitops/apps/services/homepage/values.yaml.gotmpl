@@ -1,0 +1,217 @@
+# =============================================================================
+# Values for the upstream homepage chart (loader v2 — source A, HTTP via shim).
+# Services/bookmarks/widgets are DISCOVERED from gethomepage.dev/* annotations on
+# each app's HTTPRoute (Cilium Gateway API) — so a tile appears/disappears with
+# the service. The static lists stay empty by design.
+# =============================================================================
+chart:
+  env:
+    # Host-validation allowlist (homepage rejects unknown Host headers otherwise).
+    HOMEPAGE_ALLOWED_HOSTS: homepage.{{ .Values.cluster.domain }}
+    # ArgoCD widget read-only token (ESO: homepage-argocd ← OpenBao apps/homepage/argocd,
+    # minted by terraform/argocd). Referenced as {{`{{HOMEPAGE_VAR_ARGOCD_TOKEN}}`}}.
+    HOMEPAGE_VAR_ARGOCD_TOKEN:
+      valueFrom:
+        secretKeyRef:
+          name: homepage-argocd
+          key: token
+          # optional → pod still starts before terraform/argocd mints the
+          # secret; the widget just shows no-token until the token is minted + pod restarted.
+          optional: true
+
+  # SA + ClusterRole (reads services, ingresses AND gateway.networking.k8s.io
+  # httproutes/gateways) so cluster-mode discovery can see the annotated routes.
+  resources:
+    requests:
+      memory: 160Mi
+  enableRbac: true
+
+  # The chart's own ingress is unused — we expose via the shared Cilium Gateway
+  # (templates/homepage-httproute.yaml).
+  ingress:
+    main:
+      enabled: false
+
+  # Mount custom CSS (homepage-custom-css CM, templates/custom-css.yaml) at
+  # /app/config/custom.css — homepage auto-loads it (compact node-tile grid + density).
+  persistence:
+    custom-css:
+      enabled: true
+      type: configMap
+      name: homepage-custom-css
+      mountPath: /app/config/custom.css
+      subPath: custom.css
+      readOnly: true
+
+  config:
+    # RAW STRING (not `settings:`). The chart toYaml's `config.settings`, which lets Helm
+    # alphabetize the layout map and scramble group order. `settingsString` is written
+    # verbatim, so the layout LIST order below is preserved exactly. (Keep services/bookmarks/
+    # widgets/kubernetes as structured values — only settings needs the raw form.)
+    settingsString: |
+      title: irkalla
+      theme: dark
+      color: slate
+      headerStyle: clean
+      hideVersion: true
+      background:
+        image: https://images.unsplash.com/photo-1451187580459-43490279c0fa
+        blur: sm
+        saturate: 60
+        brightness: 40
+        opacity: 50
+      cardBlur: sm
+      # The longhorn info widget reads its endpoint from here (a PROVIDER), not from the widget
+      # block (homepage's longhorn handler looks up settings.providers.longhorn.url).
+      providers:
+        longhorn:
+          url: http://longhorn-frontend.longhorn-system.svc
+      # Local/cluster groups first, then web/bookmark groups (separated). Order honoured.
+      layout:
+        - Nodes:
+            columns: 3
+        - Status: {}
+        - Infrastructure:
+            style: row
+            columns: 4
+        - Platform:
+            style: row
+            columns: 4
+        - Administration:
+            style: row
+            columns: 4
+        # Local cluster apps (discovered from HTTPRoute gethomepage.dev/group: "Apps",
+        # e.g. Ghostfolio). Placed AFTER the local-service groups and BEFORE the external
+        # link groups so it joins the top cluster block — Media/Mail/Finance flow down a row.
+        - Apps:
+            style: row
+            columns: 4
+        - Media:
+            style: row
+            columns: 4
+        - Mail:
+            style: row
+            columns: 4
+        - Finance:
+            style: row
+            columns: 4
+        - "AI & Tools":
+            style: row
+            columns: 4
+    kubernetes:
+      mode: cluster
+      gateway: true     # discover Gateway API HTTPRoutes, not just Ingresses
+    # Cluster service TILES are discovered from HTTPRoute gethomepage.dev/* annotations.
+    # The external/web links are STATIC services (not bookmarks) so they render at the SAME
+    # tile size as the cluster ones instead of the smaller bookmark style. bookmarks empty.
+    services:
+      # Per-node machine stats via VM customapi (node-exporter in monitoring ns). Each metric
+      # is one VM /api/v1/query (URL-encoded PromQL). Prototype: server-a only — b/c + power
+      # (RAPL, once the node-exporter cap lands) to follow once we like the look/size.
+      - Nodes:
+{{- range list (dict "name" "server-a" "ip" "192.168.1.3") (dict "name" "server-b" "ip" "192.168.1.4") (dict "name" "server-c" "ip" "192.168.1.5") }}
+          - {{ .name }}:
+              id: nodecard
+              icon: mdi-laptop
+              widgets:
+                - type: customapi
+                  url: "http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428/api/v1/query?query=100-avg%28rate%28node_cpu_seconds_total%7bmode%3d%22idle%22%2cinstance%3d%22{{ .ip }}%3a9100%22%7d%5b2m%5d%29%29%2a100"
+                  refreshInterval: 15000
+                  display: list
+                  mappings:
+                    - field: data.result.0.value.1
+                      label: CPU
+                      format: percent
+                - type: customapi
+                  url: "http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428/api/v1/query?query=node_memory_MemTotal_bytes%7binstance%3d%22{{ .ip }}%3a9100%22%7d-node_memory_MemAvailable_bytes%7binstance%3d%22{{ .ip }}%3a9100%22%7d"
+                  refreshInterval: 15000
+                  display: list
+                  mappings:
+                    - field: data.result.0.value.1
+                      label: RAM
+                      format: bytes
+                - type: customapi
+                  url: "http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428/api/v1/query?query=max%28node_hwmon_temp_celsius%7binstance%3d%22{{ .ip }}%3a9100%22%7d%29"
+                  refreshInterval: 15000
+                  display: list
+                  mappings:
+                    - field: data.result.0.value.1
+                      label: Temp °C
+                - type: customapi
+                  url: "http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428/api/v1/query?query=100%2a%281-node_filesystem_avail_bytes%7binstance%3d%22{{ .ip }}%3a9100%22%2cmountpoint%3d%22%2fvar%22%7d%2fnode_filesystem_size_bytes%7binstance%3d%22{{ .ip }}%3a9100%22%2cmountpoint%3d%22%2fvar%22%7d%29"
+                  refreshInterval: 15000
+                  display: list
+                  mappings:
+                    - field: data.result.0.value.1
+                      label: Disk
+                      format: percent
+                - type: customapi
+                  # package (CPU) watts — reliable on all 3; psys/platform is broken here
+                  # (server-c counter stuck at 0, server-b underreports). package = 5/9/22W.
+                  url: "http://vmsingle-victoria-metrics-k8s-stack.monitoring.svc:8428/api/v1/query?query=round%28sum%28rate%28node_rapl_package_joules_total%7binstance%3d%22{{ .ip }}%3a9100%22%7d%5b2m%5d%29%29%29"
+                  refreshInterval: 15000
+                  display: list
+                  mappings:
+                    - field: data.result.0.value.1
+                      label: Power W
+{{- end }}
+      # Monitoring stack groups (right column, under Nodes — CSS pins #statuscard to col 4).
+      - Status:
+          - ArgoCD:
+              id: statuscard
+              icon: argo-cd.png
+              href: https://argocd.{{ .Values.cluster.domain }}
+              widget:
+                type: argocd
+                url: http://argocd-server.argocd.svc
+                key: "{{`{{HOMEPAGE_VAR_ARGOCD_TOKEN}}`}}"
+      - Media:
+          - YouTube:
+              icon: youtube.png
+              href: "https://youtube.com/"
+              description: Videos
+          - Reddit:
+              icon: reddit.png
+              href: "https://reddit.com/"
+              description: Communities
+      - Mail:
+          - Gmail:
+              icon: gmail.png
+              href: "https://mail.google.com/"
+              description: Email
+          - ProtonMail:
+              icon: proton-mail.png
+              href: "https://mail.proton.me/"
+              description: Encrypted email
+      - Finance:
+          - Investing.com:
+              icon: mdi-chart-line
+              href: "https://www.investing.com/"
+              description: Markets & news
+          - Google Finance:
+              icon: google.png
+              href: "https://www.google.com/finance/"
+              description: Markets
+      - "AI & Tools":
+          - Claude:
+              icon: claude-ai.png
+              href: "https://claude.ai/"
+              description: AI assistant
+    bookmarks: []
+    # Top-bar INFO widgets. Keyless. (longhorn is an info widget → header, not a right-column
+    # tile; it renders per-node storage bars + cluster total from the Longhorn /v1/nodes API.)
+    widgets:
+      - longhorn:
+          expanded: true     # per-node detail, not just the summary bar
+          total: true        # cluster-wide total
+          labels: true       # node names
+          nodes: true        # per-node breakdown
+      - search:
+          provider: duckduckgo
+          target: _blank
+      - openmeteo:
+          label: Tallinn
+          latitude: 59.437
+          longitude: 24.754
+          units: metric
+          cache: 5

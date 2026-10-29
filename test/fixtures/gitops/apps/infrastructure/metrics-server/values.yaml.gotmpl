@@ -1,0 +1,12 @@
+# metrics-server — serves the live metrics.k8s.io API (HPAs, `kubectl top`, Radar's live CPU/mem
+# widgets). NOT a replacement for VictoriaMetrics (history); a separate, live, in-memory API.
+# Verifies kubelet serving certs against the cluster CA — no --kubelet-insecure-tls — which works
+# because Talos rotate-server-certificates + kubelet-serving-cert-approver give each kubelet a
+# CA-signed cert with its InternalIP in the SANs.
+chart:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

@@ -1,0 +1,10 @@
+project: platform
+wave: -12                # secrets — after storage (longhorn -15), before secret-consumers
+namespace: openbao
+createNamespace: false   # templated (privileged PSA — OpenBao needs IPC_LOCK / the init job runs as root)
+syncOptions:
+  - ServerSideApply=true
+chart:
+  name: openbao
+  version: "0.30.6"
+  repo: oci://ghcr.io/openbao/charts

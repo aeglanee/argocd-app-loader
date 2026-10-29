@@ -1,0 +1,93 @@
+# =============================================================================
+# Values for the upstream argo-cd subchart (dependency name "argo-cd")
+# =============================================================================
+chart:
+  global:
+    domain: argocd.{{ .Values.cluster.domain }}
+    priorityClassName: {{ .Values.cluster.priorityClasses.critical }}
+
+  # Dex is only needed for OIDC, which we route through Authentik. Off until
+  # Authentik exists (matches the bootstrap seed) — admin login meanwhile.
+  dex:
+    enabled: {{ .Values.cluster.features.oidc | default false }}
+
+  server:
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: 64Mi
+
+  configs:
+    params:
+      server.insecure: "true"
+    cm:
+      create: true
+      # Read-only LOCAL accounts for API consumers. apiKey = token auth only (no UI login).
+      # Tokens are minted by terraform/argocd (argocd_account_token, Forgejo Actions tofu-apply) →
+      # OpenBao apps/<account>/argocd → each consumer's ESO. Add the account here AND in
+      # terraform/argocd var.readonly_accounts, plus the role:readonly line in policy.csv below.
+      accounts.homepage: apiKey   # homepage ArgoCD widget
+      accounts.radar: apiKey      # radar GitOps deep-diff
+      {{- if .Values.cluster.features.oidc }}
+      oidc.config: |
+        name: Authentik
+        issuer: https://authentik.{{ .Values.cluster.domain }}/application/o/argocd/
+        clientID: argocd
+        clientSecret: $argocd-oidc-secret:clientSecret
+        requestedScopes: ["openid", "profile", "groups"]
+        requestedIDTokenClaims:
+          groups:
+            essential: true
+      {{- end }}
+      # Cosmetic-drift suppressions — admission adds defaults the rendered
+      # manifest does not carry, which ArgoCD would otherwise flag as OutOfSync.
+      resource.customizations.ignoreDifferences.external-secrets.io_ExternalSecret: |
+        jqPathExpressions:
+          - .spec.data[].remoteRef.conversionStrategy
+          - .spec.data[].remoteRef.decodingStrategy
+          - .spec.data[].remoteRef.metadataPolicy
+          - .spec.data[].remoteRef.nullBytePolicy
+      resource.customizations.ignoreDifferences.apps_StatefulSet: |
+        jqPathExpressions:
+          - .spec.volumeClaimTemplates[].apiVersion
+          - .spec.volumeClaimTemplates[].kind
+          - .spec.volumeClaimTemplates[].status
+    rbac:
+      create: true
+      policy.default: ''
+      policy.csv: |
+        g, infrastructure-admins, role:admin
+        g, argocd-admin, role:admin
+        g, argocd-viewer, role:readonly
+        g, homepage, role:readonly
+        g, radar, role:readonly
+      {{- if .Values.cluster.features.oidc }}
+      scopes: "[groups]"
+      {{- end }}
+
+  # Critical tier: every component needs a request, or the kubelet evicts it first under pressure.
+  controller:
+    resources:
+      requests:
+        memory: 640Mi
+  repoServer:
+    resources:
+      requests:
+        memory: 128Mi
+  applicationSet:
+    resources:
+      requests:
+        memory: 64Mi
+  notifications:
+    resources:
+      requests:
+        memory: 64Mi
+  dex:
+    resources:
+      requests:
+        memory: 32Mi
+  redis:
+    resources:
+      requests:
+        memory: 32Mi

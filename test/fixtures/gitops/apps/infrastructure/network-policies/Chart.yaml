@@ -1,0 +1,12 @@
+apiVersion: v2
+name: network-policies
+description: >-
+  The cluster-wide network-policy lockdown layer: a default-deny
+  CiliumClusterwideNetworkPolicy plus the additive baselines every pod needs
+  (intra-namespace, DNS, host/kubelet probes, kube-apiserver, health, metrics
+  scrape). Per-app allowlists live in each app's own templates/. Everything is
+  gated on features.networkPolicy and runs in audit mode until enforce is flipped.
+  Local templates only, no upstream chart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

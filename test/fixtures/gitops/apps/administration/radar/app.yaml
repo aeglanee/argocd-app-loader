@@ -1,0 +1,11 @@
+project: administration
+wave: 12                    # leaf app; OIDC discovery is runtime (login), needs ESO/authentik/cnpg up
+namespace: radar
+createNamespace: false      # own ns templated below with restricted PSA
+syncOptions:
+  - ServerSideApply=true
+
+chart:                      # loader v2 — HTTP chart via the shim when cluster.mirrors.via.shim is on (skyhook publishes no OCI)
+  name: radar
+  version: "1.18.2"
+  repo: https://skyhook-io.github.io/helm-charts

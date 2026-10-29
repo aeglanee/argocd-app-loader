@@ -1,0 +1,11 @@
+# OIDC group → ClusterRole. The group NAMES must match what Authentik puts in the token's
+# `groups` claim (the authentik app's blueprint, oidcClients.radar.groups). Unprefixed on purpose:
+# the apiserver has no --oidc-groups-prefix and Radar's groupsPrefix is empty, so both paths see the
+# raw name.
+groupBindings:
+  - group: infrastructure-admins   # retiring with the group
+    clusterRole: cluster-admin
+  - group: k8s-admin
+    clusterRole: cluster-admin
+  - group: k8s-viewer
+    clusterRole: view

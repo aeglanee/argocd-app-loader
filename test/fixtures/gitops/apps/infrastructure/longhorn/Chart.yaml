@@ -1,0 +1,9 @@
+apiVersion: v2
+name: longhorn
+description: >-
+  Local chart — longhorn HTTPRoute + single-replica local StorageClass + privileged namespace. The
+  upstream longhorn chart is app.yaml chart.repo (HTTP-only, so it goes through the Harbor shim
+  when mirrored).
+type: application
+version: 0.1.0
+appVersion: "1.12.0"

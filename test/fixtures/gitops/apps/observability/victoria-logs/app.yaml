@@ -1,0 +1,11 @@
+project: observability
+wave: 1                    # after the VM stack (wave 0) + Longhorn (PVC)
+namespace: monitoring
+createNamespace: false     # monitoring exists (templated privileged PSA — Vector's DaemonSet needs hostPath /var/log/pods)
+syncOptions:
+  - ServerSideApply=true
+
+chart:
+  name: victoria-logs-single
+  version: "0.13.10"
+  repo: oci://ghcr.io/victoriametrics/helm-charts

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: admission-policies
+description: Built-in admission policies — default memory requests so no pod is invisible to the scheduler.
+type: application
+version: 0.1.0

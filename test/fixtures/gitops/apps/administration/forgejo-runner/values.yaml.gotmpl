@@ -1,0 +1,97 @@
+# =============================================================================
+# Forgejo Actions runner (TRIAL) — forgejo-runner + the experimental k8s backend plugin
+# (runner ≥13.1 plugin interface; github.com/eleboucher/runner-k8s-plugin, one maintainer). Each
+# job runs as its own pod in this namespace — no Docker daemon, no privileged containers. Jobs
+# pick their image with `container:`; label `k8s` is the only runs-on. Off server-b.
+# =============================================================================
+chart:
+  forgejo:
+    url: http://forgejo-http.forgejo.svc:3000     # in-cluster; jobs are told the same base
+    existingSecret: forgejo-runner-secret
+  deploymentAnnotations: {}                      # chart default wants stakater/reloader (not installed)
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values: ["server-b"]
+  runnerConfig: |
+    log:
+      level: info
+    cache:
+      enabled: false
+    container:
+      docker_host: "-"
+      workdir_parent: shared/workdir
+    host:
+      workdir_parent: /data/act
+    plugins:
+      k8s:
+        address: "unix:///plugin/forgejo-runner-k8s.sock"
+        options:
+          namespace: forgejo-runner
+          poll_timeout: 10m
+          labels: "app.kubernetes.io/name=forgejo-ci-job"
+          resources: |
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+    runner:
+      capacity: 2
+      timeout: 3h                                # rts_engine nightly mutants shard: timeout-minutes 150
+      shutdown_timeout: 3m
+      labels:
+        - k8s:k8s:///config/podspec-default.yaml
+        - k8s-rust:k8s:///config/podspec-rust.yaml
+  podSpecs:
+    # Default when a job sets no `container:` — node (JS-based `uses:` actions need it) + git.
+    podspec-default.yaml: |
+      serviceAccountName: forgejo-ci-jobs
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: ["server-b"]
+      containers:
+        - name: main
+          image: node:24-bookworm
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+      restartPolicy: Never
+    # `runs-on: k8s-rust` — Rust builds (rts_engine's `scripts/check sim`). Only server-c has the
+    # headroom (16 cores; a cold sim build peaks ~0.8 GiB at CARGO_BUILD_JOBS=4, debug off). The
+    # rust-ci-cache PVC keeps crates + build output between runs (cargo's own lock serialises two
+    # jobs sharing it). The workflow pins the toolchain image with `container:`.
+    podspec-rust.yaml: |
+      serviceAccountName: forgejo-ci-jobs
+      priorityClassName: {{ .Values.cluster.priorityClasses.batch }}
+      nodeSelector:
+        kubernetes.io/hostname: server-c
+      containers:
+        - name: main
+          image: rust:1.99.1-bookworm
+          resources:
+            requests:
+              cpu: "2"
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: rust-ci-cache
+      restartPolicy: Never

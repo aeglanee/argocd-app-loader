@@ -1,0 +1,6 @@
+# =============================================================================
+# Values for the upstream cert-manager-webhook-ovh chart (loader v2 — source A).
+# groupName must match the solver groupName used by the ClusterIssuer.
+# =============================================================================
+chart:
+  groupName: "acme.{{ .Values.cluster.domain }}"

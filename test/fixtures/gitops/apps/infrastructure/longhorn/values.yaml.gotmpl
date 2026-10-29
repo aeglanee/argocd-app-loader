@@ -1,0 +1,69 @@
+# =============================================================================
+# Values for the upstream longhorn subchart. Default StorageClass "longhorn"
+# (replica 2, the cluster default); a single-replica "longhorn-local" class is
+# added via templates/. iSCSI is provided by the Talos iscsi-tools extension
+# (baked into the Image Factory schematic). Data lives at /var/lib/longhorn,
+# which is on the EPHEMERAL partition — wiped by `task talos:wipe` (fine during
+# the rebuild phase; revisit a dedicated disk when the cluster stabilises).
+# =============================================================================
+chart:
+  persistence:
+    defaultClass: true
+    defaultClassReplicaCount: 2
+    reclaimPolicy: Delete
+
+  defaultSettings:
+    # system-node-critical (not the chart's longhorn-critical, 1e9): only priority ≥2e9 is
+    # "critical" to the kubelet, which then EVICTS others to admit the pod instead of refusing it.
+    # That makes a memory request on the node-pinned instance-managers safe (admission-policies).
+    # Longhorn applies this only while EVERY volume is detached (setting_controller.go) — changed
+    # in a planned all-stateful-down window, 2026-10-24.
+    priorityClass: system-node-critical
+    defaultReplicaCount: 2
+    defaultDataPath: /var/lib/longhorn
+    defaultDataLocality: best-effort       # keep a replica on the pod's node when possible
+    replicaSoftAntiAffinity: true          # small cluster — allow scheduling if a node is down
+    # Soft anti-affinity let some 2-replica volumes land BOTH replicas on one node (zero
+    # redundancy, and a drain-blocker). least-effort moves one off as soon as another node fits.
+    replicaAutoBalance: least-effort
+    # One rebuild per node at a time: after a node reboot, 4+ parallel rebuilds pinned server-a's
+    # 4 old cores (load ~140) → probe timeouts → engine-image crashloops → volumes couldn't attach.
+    concurrentReplicaRebuildPerNodeLimit: 1
+    # A chart upgrade does NOT move existing volumes onto the new engine — each keeps the engine it
+    # started with (32 volumes were still on 1.12.x under 1.13.0). 1 = Longhorn live-upgrades them,
+    # one per node at a time, healthy volumes only; and keeps doing so after every chart upgrade.
+    concurrentAutomaticEngineUpgradePerNodeLimit: 1
+    # Drain (tuppr/talosctl upgrades) may take a node holding the LAST replica once that replica
+    # has stopped, i.e. its pod was evicted. The default blocks forever on the single-replica
+    # longhorn-local volumes; their pods just wait for the node to come back.
+    nodeDrainPolicy: allow-if-replica-is-stopped
+    # Longhorn schedules against a volume's REQUESTED size, not its actual usage. This cluster
+    # runs at ~14% real usage (446Gi requested / 64Gi actual — Garage alone claims 300Gi to hold
+    # 17Gi), so at 100% the scheduler hits its wall with ~80% of the physical disk still free.
+    # That is what turned a CI workspace leak into a cluster-wide outage on 2026-08-02: no volume
+    # could be scheduled at all, so every pipeline hung on an unbound PVC.
+    # 200% matches the scheduler to reality. NOTE: this trades a scheduling wall (soft, obvious)
+    # for a real-disk wall (hard, ugly) — storageMinimalAvailablePercentage below is the backstop,
+    # and Longhorn disk-space alerts are the thing that makes this safe. Watch actual usage.
+    storageOverProvisioningPercentage: 200
+    storageMinimalAvailablePercentage: 15
+    orphanResourceAutoDeletion: replica-data;instance   # stale replica data + engine/replica processes
+
+  # Request only, no limit (p95). Instance-managers get none: see admission-policies.
+  longhornManager:
+    priorityClass: system-node-critical   # per-node agent, like cilium/vector
+    resources:
+      requests:
+        memory: 320Mi
+
+  longhornUI:
+    replicas: 1
+
+  # The pre-upgrade hook (PreSync) needs longhorn-service-account, which is in the
+  # main sync — deadlock on a fresh GitOps install. It's an upgrade-only check.
+  preUpgradeChecker:
+    jobEnabled: false
+
+  # We expose the UI via our own HTTPRoute (templates/), not the chart Ingress.
+  ingress:
+    enabled: false

@@ -1,0 +1,75 @@
+# =============================================================================
+# Values for the upstream ByTheHugo ghostfolio chart 0.5.4 (git tag `ghostfolio-0.5.4`) / appVersion 3.7.0
+# (loader v2 — git-sourced via app.yaml chart.git; ByTheHugo deleted its .tgz releases).
+#
+# Postgres + Redis bundled subcharts are DISABLED — provided externally by CNPG
+# (templates/postgres.yaml) and the OT redis-operator (templates/redis.yaml).
+#
+# 3.7.0 chart shape (differs from the 3.5.x .tgz we first wrote for):
+#  - `ghostfolio:` is a MAP whose keys become the app's env (a `-configuration` Secret).
+#  - The DB is configured via `externalPostgresql` (host/port/auth/options); the chart builds
+#    DATABASE_URL from it. sslmode=disable because CNPG serves a self-signed cert the pg adapter
+#    would reject — connect plain (matches the CNPG `uri` key, which is also sslmode-less).
+#  - Redis via `externalRedis`. Passwords come from existingSecret refs, NOT $(VAR) env hacks.
+# `chart:` is the loader-v2 key for the git-sourced chart's values.
+# =============================================================================
+chart:
+  image:
+    repository: ghostfolio/ghostfolio
+    # Pinned image, deliberately AHEAD of the chart's appVersion (3.7.0) — the chart lags upstream
+    # badly and its env contract is unchanged from 3.6.0 → 3.92.0 (.env.example is byte-identical),
+    # so the newer image drops straight in. Ghostfolio runs Prisma migrations on boot and they are
+    # FORWARD-ONLY: rolling this tag back does NOT roll the schema back. Take a pg_dump first.
+    tag: "3.92.0"
+
+  replicaCount: 1
+
+  # `ghostfolio:` map = app config + the stable salt/jwt. Keys here become env vars (via the chart's
+  # -configuration Secret). ACCESS_TOKEN_SALT + JWT_SECRET_KEY MUST stay stable across ArgoCD renders
+  # (the chart's randAlphaNum fallback regenerates every sync) → pinned in OpenBao → ESO → existingSecret.
+  ghostfolio:
+    existingSecret: ghostfolio-app-secret
+    existingSecretAccessTokenSaltKey: ACCESS_TOKEN_SALT
+    existingSecretJwtSecretKeyKey: JWT_SECRET_KEY
+    BASE_CURRENCY: "EUR"
+    # Only Yahoo (real equities) + Manual (hand-entered). Dropping COINGECKO disables crypto price
+    # data — re-add "COINGECKO" if crypto is held. JSON-array string.
+    DATA_SOURCES: '["YAHOO","MANUAL"]'
+    PORT: "3333"
+    NPM_CONFIG_CACHE: /tmp/npm-cache
+
+  # --- External Postgres = our CNPG cluster (templates/postgres.yaml) ---
+  postgresql:
+    enabled: false
+  externalPostgresql:
+    host: ghostfolio-postgres-rw
+    port: 5432
+    auth:
+      username: ghostfolio
+      database: ghostfolio
+      existingSecret: ghostfolio-postgres-app   # CNPG-generated -app secret
+      secretKeys:
+        userPasswordKey: password               # the -app secret's password key
+    options: sslmode=disable&connect_timeout=300
+
+  # --- External Redis = our OT redis-operator instance (templates/redis.yaml) ---
+  redis:
+    enabled: false
+  externalRedis:
+    host: ghostfolio-redis.ghostfolio.svc.cluster.local
+    port: 6379
+    auth:
+      enabled: true
+      existingSecret: ghostfolio-redis-secret
+      existingSecretPasswordKey: password
+
+  service:
+    port: 3333
+
+  # Ingress emitted from our own templates/ (HTTPRoute) instead.
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      memory: 544Mi

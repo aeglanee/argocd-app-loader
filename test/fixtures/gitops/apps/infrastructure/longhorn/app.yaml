@@ -1,0 +1,10 @@
+project: infrastructure
+wave: -15                # storage — after the foundation, before stateful apps
+namespace: longhorn-system
+createNamespace: false   # we template the namespace (needs privileged PodSecurity)
+syncOptions:
+  - ServerSideApply=true
+chart:                   # loader v2 — HTTP Helm repo (→ Harbor shim when cluster.mirrors.via.shim is on)
+  name: longhorn
+  version: "1.13.0"
+  repo: https://charts.longhorn.io

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: garage
+description: |
+  Local wrapper for Garage (loader v2 — upstream chart in app.yaml via chart.git).
+  Holds the admin-token ESO (OpenBao → GARAGE_ADMIN_TOKEN) and the idempotent
+  layout-bootstrap Job (admin API). Shared S3 hub replacing MinIO.
+type: application
+version: 0.1.0

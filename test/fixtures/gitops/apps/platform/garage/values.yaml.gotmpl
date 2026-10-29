@@ -1,0 +1,76 @@
+# =============================================================================
+# Values for the upstream garage chart (loader v2 — source A, git-sourced).
+# Shared S3 hub replacing MinIO. Garage does its OWN replication across nodes,
+# so the PVCs sit on longhorn-local (r1) — no double-replication — and pods are
+# spread 1/node. Built-in Kubernetes peer discovery (no manual peer list).
+# =============================================================================
+chart:
+  priorityClassName: {{ .Values.cluster.priorityClasses.stateful }}   # replicated stateful member (RF=3)
+  garage:
+    dbEngine: lmdb                     # recommended metadata engine
+    replicationFactor: "3"             # 3 nodes, each a full copy → survives 2 node losses
+    consistencyMode: "consistent"      # read-after-write (a registry backend wants this)
+    metadataAutoSnapshotInterval: "6h" # periodic lmdb metadata snapshot for safety
+    s3:
+      api:
+        region: "garage"               # Harbor's S3 region must match this
+        rootDomain: ".s3.garage.{{ .Values.cluster.domain }}"
+      web:
+        rootDomain: ".web.garage.{{ .Values.cluster.domain }}"
+
+  image:
+    repository: dxflrs/amd64_garage     # amd64 (the laptops)
+    tag: "v2.5.0"                       # pin — no floating latest (moves with the chart tag in app.yaml)
+
+  # Admin API master token (full scope) from OpenBao via ESO (templates/admin-token-eso.yaml).
+  # Enables + authenticates Garage's admin API (already bound on :3903) so the layout
+  # bootstrap Job and terraform/garage can drive it. Garage reads GARAGE_ADMIN_TOKEN directly.
+  environment:
+    - name: GARAGE_ADMIN_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: garage-admin-token
+          key: adminToken
+
+  deployment:
+    kind: StatefulSet
+    replicaCount: 3
+    podManagementPolicy: Parallel       # all 3 start together → faster cluster discovery
+
+  persistence:
+    enabled: true
+    meta:
+      storageClass: longhorn-local
+      size: 5Gi                         # lmdb object catalog (small, grows with object count)
+    data:
+      storageClass: longhorn-local
+      size: 100Gi                       # block storage; ~100Gi usable at RF=3 (capped by server-a); Longhorn-expandable
+
+  service:
+    type: ClusterIP                     # S3 API on :3900 (Harbor connects here, path-style)
+
+  # Expose nothing via the chart's nginx Ingress — Garage has no admin web UI, and
+  # the S3 API is internal (Harbor) for now.
+  ingress:
+    s3:
+      api:
+        enabled: false
+      web:
+        enabled: false
+
+  # Hard anti-affinity → exactly 1 garage pod per node (HA across the erasure of nodes).
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: garage
+              app.kubernetes.io/instance: garage
+          topologyKey: kubernetes.io/hostname
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi    # p95 ~37Mi (was 256Mi: ~650 MiB over-reserved across 3 pods)
+    limits:
+      memory: 1Gi

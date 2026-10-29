@@ -1,0 +1,9 @@
+apiVersion: v2
+name: rbac
+description: >-
+  Cluster-wide OIDC RBAC — maps Authentik groups (surfaced by the kube-apiserver's
+  OIDC config and by Radar's impersonation) onto Kubernetes ClusterRoles.
+  Local templates only, no upstream chart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,0 +1,9 @@
+# Pure metadata — read by the umbrella loader, NOT passed to Helm.
+# Built-in admission policies (MutatingAdmissionPolicy, in-apiserver — no webhook, no extra pods).
+# Local templates only. See docs/OPERATIONS.md § Memory requests & priority.
+project: infrastructure
+wave: -27                 # right after priority-classes; affects only pods created from then on
+namespace: kube-system    # policies are cluster-scoped; this is just the app's home ns
+createNamespace: false
+syncOptions:
+  - ServerSideApply=true

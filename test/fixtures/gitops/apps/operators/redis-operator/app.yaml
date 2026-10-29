@@ -1,0 +1,10 @@
+project: operators
+wave: -5
+namespace: redis-system
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
+chart:                   # loader v2 — OCI chart via ghcr-proxy (airgapped; was the ot-container-kit HTTP repo)
+  name: redis-operator
+  version: "0.27.0"
+  repo: oci://ghcr.io/ot-container-kit/charts

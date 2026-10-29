@@ -1,0 +1,1 @@
+description: "Internal services the cluster consumes — secrets (OpenBao/ESO), TF state, S3, registry (Harbor)"

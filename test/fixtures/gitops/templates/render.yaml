@@ -1,0 +1,8 @@
+{{- /*
+  All Application + AppProject rendering is delegated to the
+  argocd-app-loader library chart (oci://ghcr.io/aeglanee/charts). It walks
+  apps under THIS chart and emits the corresponding CRs.
+
+  Documentation: https://github.com/aeglanee/argocd-app-loader
+*/ -}}
+{{- include "argocd-app-loader.loader" . -}}

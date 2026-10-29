@@ -1,0 +1,2 @@
+description: "Headless cluster substrate — CNI, DNS, storage, certificates, node tuning"
+project: infrastructure
