@@ -1,8 +1,9 @@
 # Tests
 
 `task check` lints the chart, runs the unit tests, renders every fixture against this checkout of
-the loader and fails if a render differs from its committed file in `golden/`. After a deliberate
-change, run `task golden`, review the diff, and commit it with the change.
+the loader, fails if a render differs from its committed file in `golden/`, and validates the
+goldens. After a deliberate change, run `task golden`, review the diff, and commit it with the
+change.
 
 | Fixture | Rendered into | Source |
 |---|---|---|
@@ -24,3 +25,11 @@ gitops renders the loader in its own CI, shrink it to one app per shape.
 `unit/tests/`. A library chart can't be tested on its own, so `unit/` is a consumer whose fixture
 apps sit under `unit/apps/unit/`, each switched on only by the tests that need it. Golden renders
 show what changed; unit tests pin behaviour the goldens can't show, such as a render that must fail.
+
+## Schema check
+
+`task validate` runs `kubeconform -strict` over the goldens, against the Application and
+AppProject JSON Schemas from [datreeio/CRDs-catalog](https://github.com/datreeio/CRDs-catalog),
+pinned to a commit in `Taskfile.yml`. It catches what renders fine but Argo CD would reject or
+ignore: a misspelt field, or `null` where a list belongs (the old `syncOptions: null`). It needs
+network access to fetch the schemas. `valuesObject` is free-form, so values aren't checked.

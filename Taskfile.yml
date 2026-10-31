@@ -3,6 +3,11 @@
 # test/golden/. A change to the loader shows up as a diff of the real output; review it, then commit.
 version: "3"
 
+vars:
+  # JSON Schemas for the Argo CD kinds in the goldens, from datreeio/CRDs-catalog, pinned to a
+  # commit so a catalog change can't break or loosen the check unnoticed. Bump it on purpose.
+  CRDS_CATALOG: https://raw.githubusercontent.com/datreeio/CRDs-catalog/3eb90d47aba8d61919d4419dd38301536e32a94b
+
 tasks:
   golden:
     desc: Render the fixtures into test/golden/
@@ -22,10 +27,19 @@ tasks:
       - rm -rf test/unit/charts test/unit/Chart.lock && helm dependency build test/unit >/dev/null
       - helm unittest test/unit
 
+  validate:
+    desc: Check the golden renders against the Application and AppProject schemas
+    cmds:
+      - >-
+        kubeconform -strict -summary
+        -schema-location '{{.CRDS_CATALOG}}/{{"{{"}}.Group{{"}}"}}/{{"{{"}}.ResourceKind{{"}}"}}_{{"{{"}}.ResourceAPIVersion{{"}}"}}.json'
+        test/golden/*.yaml
+
   check:
-    desc: Lint the chart, run the unit tests and fail if a render differs from its committed golden file
+    desc: Lint the chart, run the unit tests, fail if a render differs from its golden file, validate the goldens
     cmds:
       - helm lint .
       - task: unit
       - task: golden
       - git diff --exit-code -- test/golden
+      - task: validate
