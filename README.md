@@ -179,9 +179,9 @@ through. Common fields:
 <!-- -->
 
 > **Files must parse.** A `_group.yaml`, or an enabled app's `app.yaml` or values file,
-> that isn't a valid YAML mapping (for `values.yaml.gotmpl`: after templating) fails the
-> render with the file name and the parser's error, instead of deploying the app with
-> empty values. A disabled app's files aren't read.
+> that isn't a valid YAML mapping fails the render with the file name and the parser's
+> error, instead of deploying the app with empty values. Values files (`values.yaml.gotmpl`
+> or a plain `values.yaml`) are checked after templating. A disabled app's files aren't read.
 
 #### Chart source (`chart:`) — multisource
 

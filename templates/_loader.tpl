@@ -73,6 +73,7 @@
     {{- $hasLocalChart := ne ($.Files.Get (printf "%s/%s/%s/Chart.yaml" $appsRoot $group $name)) "" -}}
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
     {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict -}}
+    {{- include "argocd-app-loader.requireYaml" (dict "parsed" $groupMeta "file" $groupPath) -}}
     {{- /*
       Read the wrapper's templated values, tpl-render against the consumer
       chart context, and parse to YAML. The rendered values are merged with
