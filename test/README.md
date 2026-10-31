@@ -32,5 +32,6 @@ show what changed; unit tests pin behaviour the goldens can't show, such as a re
 `task validate` runs `kubeconform -strict` over the goldens, against the Application and
 AppProject JSON Schemas from [datreeio/CRDs-catalog](https://github.com/datreeio/CRDs-catalog),
 pinned to a commit in `Taskfile.yml`. It catches what renders fine but Argo CD would reject or
-ignore: a misspelt field, or `null` where a list belongs (the old `syncOptions: null`). It needs
-network access to fetch the schemas. `valuesObject` is free-form, so values aren't checked.
+ignore: a misspelt `spec` field, or `null` where a list belongs (the old `syncOptions: null`). The
+schemas don't constrain `metadata`, and `valuesObject` is free-form, so neither is checked. The
+first run needs network access; the schemas are then cached in `.helm-tests/kubeconform/`.

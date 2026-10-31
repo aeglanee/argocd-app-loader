@@ -34,8 +34,10 @@ tasks:
   validate:
     desc: Check the golden renders against the Application and AppProject schemas
     cmds:
+      # The cache (git-ignored) saves refetching the pinned schemas, and lets the check run offline.
+      - mkdir -p .helm-tests/kubeconform
       - >-
-        kubeconform -strict -summary
+        kubeconform -strict -summary -cache .helm-tests/kubeconform
         -schema-location '{{.CRDS_CATALOG}}/{{"{{"}}.Group{{"}}"}}/{{"{{"}}.ResourceKind{{"}}"}}_{{"{{"}}.ResourceAPIVersion{{"}}"}}.json'
         test/golden/*.yaml
 
