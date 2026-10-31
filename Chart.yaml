@@ -3,10 +3,10 @@ name: argocd-app-loader
 description: |
   Helm library chart that discovers per-app wrapper charts on the consumer's
   filesystem and emits one Argo CD Application per app + one AppProject per
-  group. Cluster config cascades into every wrapper release under a `cluster:`
-  key via helm.valuesObject (NOT `global:`, so it does not leak into upstream
-  subcharts). Style influenced by argoproj/argo-helm/charts/argocd-apps; the
-  differentiator is filesystem discovery instead of a flat values map.
+  group. Each app's values file is rendered against the consumer's values and
+  passed via helm.valuesObject. Style influenced by
+  argoproj/argo-helm/charts/argocd-apps; the differentiator is filesystem
+  discovery instead of a flat values map.
 type: library
 version: 0.8.0
 appVersion: "0.8.0"

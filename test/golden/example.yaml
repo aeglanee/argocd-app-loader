@@ -70,61 +70,11 @@ spec:
     namespace: hello
   source:
     repoURL: "git@github.com:example/cluster.git"
-    targetRevision: HEAD
+    targetRevision: "HEAD"
     path: examples/consumer/apps/demo/hello
     helm:
       releaseName: hello
-      # Per-source value handling:
-      #   - .wrapperValues: the wrapper's own values.yaml, already tpl-rendered
-      #     against the consumer chart context by the loader so cross-cutting
-      #     references like example.com resolve.
-      #   - cluster: cluster identity/config, recursively overwritten on top so
-      #     cluster identity always wins over per-app declarations. Injected
-      #     under `cluster:` (NOT `global:`) so it cascades into THIS wrapper's
-      #     own templates (as .Values.cluster.*) WITHOUT silently propagating
-      #     into upstream subcharts via Helm's global mechanism — which would
-      #     risk collisions with charts that read global.* (imageRegistry,
-      #     storageClass, imagePullSecrets, ...). To deliberately feed an
-      #     upstream chart a real Helm global, set `global:` explicitly in that
-      #     wrapper's own values.
-      # Both go through valuesObject so we deliver structured YAML rather than
-      # a string blob — easier for ArgoCD to diff and for humans to read.
       valuesObject:
-        cluster:
-          apps:
-            gitchart: true
-            hello: true
-            httpchart: true
-            wraponly: true
-            wrapped: true
-          argocdNamespace: argocd
-          clusterServer: https://kubernetes.default.svc
-          domain: example.com
-          localGitRepo: git@gitea.{{ .Values.cluster.domain }}:example/cluster.git
-          mirrors:
-            table:
-              ghcr.io:
-                project: ghcr-proxy
-                via: harbor
-              github.com/rustfs/operator:
-                repo: rustfs-operator
-                via: forgejo
-              stefanprodan.github.io/podinfo:
-                via: shim
-            via:
-              forgejo:
-                base: http://gitea.{{ .Values.cluster.domain }}/example
-                enabled: false
-              harbor:
-                enabled: false
-                host: harbor.{{ .Values.cluster.domain }}
-              shim:
-                enabled: false
-                project: shim-proxy
-          remoteGitRepo: git@github.com:example/cluster.git
-          repoBasePath: examples/consumer
-          targetRevision: HEAD
-          useLocalGit: false
         message: hello, example.com
   syncPolicy:
     automated:
@@ -163,6 +113,39 @@ spec:
         releaseName: httpchart
         valuesObject:
           {}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+    syncOptions:
+    - CreateNamespace=true
+
+---
+# Source: cluster/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: patched
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "9"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "demo"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: patched
+  sources:
+    - repoURL: "git@github.com:example/cluster.git"
+      targetRevision: "HEAD"
+      path: examples/consumer/apps/demo/patched/kustomize
   syncPolicy:
     automated:
       prune: true
@@ -240,46 +223,14 @@ spec:
           ui:
             message: from example.com
     - repoURL: "git@github.com:example/cluster.git"
-      targetRevision: HEAD
+      targetRevision: "HEAD"
       path: examples/consumer/apps/demo/wrapped
       helm:
         releaseName: wrapped
         valuesObject:
           cluster:
-            apps:
-              gitchart: true
-              hello: true
-              httpchart: true
-              wraponly: true
-              wrapped: true
             argocdNamespace: argocd
-            clusterServer: https://kubernetes.default.svc
             domain: example.com
-            localGitRepo: git@gitea.{{ .Values.cluster.domain }}:example/cluster.git
-            mirrors:
-              table:
-                ghcr.io:
-                  project: ghcr-proxy
-                  via: harbor
-                github.com/rustfs/operator:
-                  repo: rustfs-operator
-                  via: forgejo
-                stefanprodan.github.io/podinfo:
-                  via: shim
-              via:
-                forgejo:
-                  base: http://gitea.{{ .Values.cluster.domain }}/example
-                  enabled: false
-                harbor:
-                  enabled: false
-                  host: harbor.{{ .Values.cluster.domain }}
-                shim:
-                  enabled: false
-                  project: shim-proxy
-            remoteGitRepo: git@github.com:example/cluster.git
-            repoBasePath: examples/consumer
-            targetRevision: HEAD
-            useLocalGit: false
           localGreeting: hi-from-example.com
   syncPolicy:
     automated:

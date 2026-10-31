@@ -14,12 +14,9 @@
   Conventions consumed:
     apps/<group>/_group.yaml             AppProject metadata
     apps/<group>/<name>/app.yaml         Application metadata
-    .Values.cluster                       Cluster-wide globals (cascaded into apps)
     .Values.cluster.apps.<name>           Boolean on/off toggle for each app
-
-  The toggle map lives under .Values.cluster.apps so it cascades into every
-  wrapper release alongside the rest of global.* — wrappers can branch on
-  whether peer apps are enabled (e.g. enable OIDC only if authentik is on).
+    .Values.cluster.overrides.<name>      Merged over the app's rendered values
+    .Values.argocdAppLoader.source        Where this chart's files live (repoURL, targetRevision, path)
 
   Customizable via .Values.argocdAppLoader:
     appsRoot       : root path to scan (default "apps")
@@ -30,14 +27,14 @@
 {{- define "argocd-app-loader.loader" -}}
 {{- $cfg := default dict .Values.argocdAppLoader -}}
 {{- $appsRoot := default "apps" $cfg.appsRoot -}}
-{{- /* NOT `default true`: sprig's default treats an explicit false as empty → always true. */ -}}
-{{- $requireToggle := ternary $cfg.requireToggle true (kindIs "bool" $cfg.requireToggle) -}}
-{{- $toggles := default dict .Values.cluster.apps -}}
 {{- /* Fail loudly on the pre-0.8 airgap keys rather than silently ignoring them. */ -}}
 {{- range $old := list "useLocalRegistry" "ociRepos" "shimProxy" "localRegistryHost" "gitMirrors" "localGitBase" -}}
   {{- if hasKey (default dict $.Values.cluster) $old -}}
     {{- fail (printf "argocd-app-loader: cluster.%s was removed in 0.8 — chart/git mirroring is now cluster.mirrors {via, table} (see README)" $old) -}}
   {{- end -}}
+{{- end -}}
+{{- if hasKey (default dict $.Values.cluster) "repoBasePath" -}}
+  {{- fail "argocd-app-loader: cluster.repoBasePath was removed in 0.9 — set argocdAppLoader.source.path (see README)" -}}
 {{- end -}}
 
 {{- /* Emit one Application per discovered app.yaml */ -}}
@@ -49,9 +46,10 @@
 */ -}}
 {{- $seenNames := dict -}}
 {{- range $path, $_ := .Files.Glob $appGlob -}}
+  {{- /* Read from the end: appsRoot may be several folders deep. */ -}}
   {{- $p := splitList "/" $path -}}
-  {{- $g := index $p 1 -}}
-  {{- $n := index $p 2 -}}
+  {{- $g := index $p (sub (len $p) 3) -}}
+  {{- $n := index $p (sub (len $p) 2) -}}
   {{- if hasKey $seenNames $n -}}
     {{- fail (printf "argocd-app-loader: duplicate app name %q in groups %q and %q — app folder names must be unique across groups" $n (index $seenNames $n) $g) -}}
   {{- end -}}
@@ -59,28 +57,37 @@
 {{- end -}}
 {{- range $path, $_ := .Files.Glob $appGlob }}
   {{- $parts := splitList "/" $path -}}
-  {{- $group := index $parts 1 -}}
-  {{- $name  := index $parts 2 -}}
-  {{- $toggle := index $toggles $name -}}
-  {{- $enabled := ternary $toggle (default false $toggle) (kindIs "bool" $toggle) -}}
-  {{- if not $requireToggle -}}
-    {{- $enabled = ternary $toggle true (kindIs "bool" $toggle) -}}
-  {{- end -}}
-  {{- if $enabled }}
+  {{- $group := index $parts (sub (len $parts) 3) -}}
+  {{- $name  := index $parts (sub (len $parts) 2) -}}
+  {{- if eq (include "argocd-app-loader.isOn" (dict "Values" $.Values "name" $name)) "true" }}
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
     {{- include "argocd-app-loader.requireYaml" (dict "parsed" $appMeta "file" $path) -}}
     {{- /* v2: does the app dir carry its own local chart (Chart.yaml + templates/)? → source B */ -}}
     {{- $hasLocalChart := ne ($.Files.Get (printf "%s/%s/%s/Chart.yaml" $appsRoot $group $name)) "" -}}
+    {{- $appDir := printf "%s/%s/%s" $appsRoot $group $name -}}
+    {{- /* Kustomize form: kustomize/ is rendered by Kustomize, beside the local chart. Kustomize
+           accepts three file names. */ -}}
+    {{- $hasKustomize := false -}}
+    {{- range $f := list "kustomization.yaml" "kustomization.yml" "Kustomization" -}}
+      {{- if ne ($.Files.Get (printf "%s/kustomize/%s" $appDir $f)) "" }}{{ $hasKustomize = true }}{{ end -}}
+    {{- end -}}
+    {{- range $key := list "sources" "repoURL" -}}
+      {{- if and (index $appMeta $key) $hasLocalChart -}}
+        {{- fail (printf "argocd-app-loader: %s has %s: in app.yaml and a Chart.yaml; %s: replaces the local chart, so move the chart into it or remove the Chart.yaml" $appDir $key $key) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if and $hasKustomize (or $appMeta.chart $appMeta.sources) -}}
+      {{- fail (printf "argocd-app-loader: %s has kustomize/ and %s in app.yaml; the Kustomize form renders the upstream chart itself, so use one of them" $appDir (ternary "chart:" "sources:" (not (empty $appMeta.chart)))) -}}
+    {{- end -}}
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
     {{- $groupMeta := $.Files.Get $groupPath | fromYaml | default dict -}}
     {{- include "argocd-app-loader.requireYaml" (dict "parsed" $groupMeta "file" $groupPath) -}}
     {{- /*
       Read the wrapper's templated values, tpl-render against the consumer
-      chart context, and parse to YAML. The rendered values are merged with
-      the cascaded global block and injected into the emitted Application
-      via helm.valuesObject — this is the only way to get tpl semantics on
-      values feeding an upstream subchart, since Helm itself doesn't tpl
-      values.yaml.
+      chart context, and parse to YAML. The rendered values go into the
+      emitted Application via helm.valuesObject — this is the only way to get
+      tpl semantics on values feeding an upstream subchart, since Helm itself
+      doesn't tpl values.yaml.
 
       Preferred filename: values.yaml.gotmpl. Helm does NOT auto-load it
       (only files literally named values.yaml are auto-loaded), so wrappers
@@ -105,6 +112,14 @@
         {{- $wrapperValues = fromYaml $rendered | default dict -}}
         {{- include "argocd-app-loader.requireYaml" (dict "parsed" $wrapperValues "file" $valuesPath "templated" true) -}}
       {{- end -}}
+    {{- end -}}
+    {{- /* The instance's escape hatch, merged last: maps merge, lists and scalars are replaced. */ -}}
+    {{- $override := index (default dict $.Values.cluster.overrides) $name -}}
+    {{- if not (kindIs "invalid" $override) -}}
+      {{- if not (kindIs "map" $override) -}}
+        {{- fail (printf "argocd-app-loader: cluster.overrides.%s must be a mapping of values, got %s" $name (kindOf $override)) -}}
+      {{- end -}}
+      {{- $wrapperValues = mustMergeOverwrite (deepCopy $wrapperValues) (deepCopy $override) -}}
     {{- end }}
 ---
 {{ include "argocd-app-loader.application" (dict
@@ -112,6 +127,8 @@
     "group"         $group
     "appMeta"       $appMeta
     "hasLocalChart" $hasLocalChart
+    "hasKustomize"  $hasKustomize
+    "appDir"        $appDir
     "groupMeta"     $groupMeta
     "wrapperValues" $wrapperValues
     "cluster"        $.Values.cluster
@@ -124,7 +141,8 @@
 {{- /* Emit one AppProject per discovered _group.yaml */ -}}
 {{- $groupGlob := printf "%s/*/_group.yaml" $appsRoot -}}
 {{- range $path, $_ := .Files.Glob $groupGlob }}
-  {{- $group := index (splitList "/" $path) 1 -}}
+  {{- $p := splitList "/" $path -}}
+  {{- $group := index $p (sub (len $p) 2) -}}
   {{- $meta  := $.Files.Get $path | fromYaml | default dict -}}
   {{- include "argocd-app-loader.requireYaml" (dict "parsed" $meta "file" $path) }}
 ---

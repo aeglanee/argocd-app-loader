@@ -12,7 +12,6 @@ cluster:
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
   targetRevision: HEAD
-  repoBasePath: ""              # the chart sits at the gitops repo root
 
   network:
     apiServer: "192.168.1.6"          # VIP (kube-apiserver); cilium uses KubePrism instead

@@ -1,0 +1,4 @@
+# Its own helm: block wins over the pinned versions.
+project: unit
+helm:
+  kubeVersion: "1.30.0"

@@ -1,0 +1,6 @@
+chart:
+  replicas: 1
+  args:
+    - --a
+route:
+  hostname: wrapped.{{ .Values.cluster.domain }}

@@ -1,0 +1,7 @@
+# Kustomize form: kustomize/ inflates the upstream chart and patches what its values can't change.
+# The chart's repo is literal there, so cluster.mirrors doesn't apply to it.
+wave: 9
+namespace: patched
+createNamespace: true
+requires:
+  - hello

@@ -1,0 +1,6 @@
+# Invalid: kustomize/ and an upstream chart: block.
+project: unit
+chart:
+  repo: https://charts.example.com
+  name: upstream
+  version: "1.0.0"

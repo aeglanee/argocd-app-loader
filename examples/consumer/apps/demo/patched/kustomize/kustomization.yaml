@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: patched
+helmCharts:
+  - name: podinfo
+    repo: https://stefanprodan.github.io/podinfo
+    version: 6.7.0
+    releaseName: patched
+    valuesInline:
+      replicaCount: 1
+patches:
+  - path: patches/label.yaml
+    target:
+      kind: Deployment
+      name: patched-podinfo

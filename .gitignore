@@ -12,3 +12,4 @@ Chart.lock
 *.swp
 *.swo
 .DS_Store
+examples/consumer/apps/*/*/kustomize/charts/

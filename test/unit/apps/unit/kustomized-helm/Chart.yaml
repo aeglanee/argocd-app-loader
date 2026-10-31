@@ -1,0 +1,3 @@
+apiVersion: v2
+name: kustomized-helm
+version: 0.0.0

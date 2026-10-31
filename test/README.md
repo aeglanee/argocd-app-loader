@@ -17,6 +17,10 @@ change.
 `Chart.yaml` points at the local loader. At that point its render matched the live cluster's
 Applications and AppProjects. It is not kept in sync with gitops.
 
+It has no wrapper `templates/`, so its goldens can't show that a wrapper reads a value its values
+file doesn't pass: since 0.9 the loader passes only the values file, and the fixture's 0.8-era
+wrappers would now get `valuesObject: {}`. Rendering the wrappers themselves is gitops's job.
+
 The full copy is temporary: it guards the loader workover against changes nobody intended. Once
 gitops renders the loader in its own CI, shrink it to one app per shape.
 

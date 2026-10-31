@@ -7,8 +7,8 @@ custom resources from a **filesystem layout**. Drop it into your cluster
 > Style and permissive-templating approach influenced by
 > [`argoproj/argo-helm/charts/argocd-apps`](https://github.com/argoproj/argo-helm/tree/main/charts/argocd-apps).
 > The differentiator here is **filesystem discovery** — apps are scanned
-> from disk instead of declared in a flat values map — and **automatic
-> globals cascade** via `helm.valuesObject`.
+> from disk instead of declared in a flat values map — and **templated
+> values**: each app's values file is rendered against the consumer's values.
 
 ## What it does
 
@@ -35,22 +35,15 @@ apps/
 
 - Walks `apps/<group>/<app>/app.yaml` and emits one `Application` per app.
 - Walks `apps/<group>/_group.yaml` and emits one `AppProject` per group.
-- Auto-derives the project name from the group folder, the `path:` from the
-  app folder, and (when configured) the repo URL from a single global
-  `useLocalGit` toggle.
+- Auto-derives the project name from the group folder, and the repo and `path:` of
+  the app's own files from `argocdAppLoader.source` plus the app folder.
 - **Tpl-renders each wrapper's `values.yaml`** against the consumer chart
   context, so `{{ .Values.cluster.* }}` references inside per-app values
   resolve correctly. Helm itself does not tpl values files; this is the
   loader's job.
-- Merges the rendered wrapper values with the cluster config under a
-  **`cluster:`** key (cluster config recursively overwrites on top) and injects
-  everything via `helm.valuesObject`. It is injected as `cluster:` — **not**
-  `global:` — deliberately: it cascades into each wrapper's own templates (as
-  `.Values.cluster.*`) but does **not** silently propagate into upstream
-  subcharts via Helm's `global:` mechanism, avoiding key collisions with charts
-  that read `global.*` (e.g. `imageRegistry`, `storageClass`). To feed an
-  upstream chart a real Helm global, set `global:` explicitly in that wrapper's
-  own values.
+- Passes the rendered values to the app via `helm.valuesObject`, and nothing else: a wrapper's
+  templates see only what its values file passes, so a change to one cluster value re-syncs
+  only the apps whose values use it.
 
 The result: adding an app means creating a folder. No central registry.
 
@@ -91,20 +84,20 @@ Run `helm dependency update`.
 
 That's the entire integration. Everything else is your data on disk.
 
-### 3. Cluster values
+### 3. Values
 
 ```yaml
 # values.yaml
+argocdAppLoader:
+  source:                # where this chart's files live; Helm can't tell by itself
+    repoURL: "git@github.com:example/cluster.git"
+    targetRevision: HEAD
+    path: ""             # the chart's folder in that repo; "" = the repo root
 cluster:
-  domain: example.com
-  remoteGitRepo: "git@github.com:example/cluster.git"
-  localGitRepo:  "git@gitea.{{ .Values.cluster.domain }}:example/cluster.git"
-  useLocalGit: false
+  domain: example.com    # anything your values files template from
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
-  targetRevision: HEAD
-  # repoBasePath: ""  # set if the consumer chart is not at the repo root
-  apps:                # on/off toggles (inside cluster: so they cascade)
+  apps:                  # on/off toggles
     cilium: true
 ```
 
@@ -141,26 +134,25 @@ through. Common fields:
 | `namespace` | no | app folder name | Application destination namespace |
 | `project` | no | group folder name | AppProject reference |
 | `releaseName` | no | app folder name | Helm release name |
-| `repoURL` | no | derived from `cluster.useLocalGit` | Override the source repo for this app |
-| `targetRevision` | no | `cluster.targetRevision` or `HEAD` | |
-| `path` | no | `<repoBasePath>/apps/<group>/<name>` | Override the source path |
+| `repoURL` | no | `argocdAppLoader.source.repoURL` | Another repo for this app (resolved through `cluster.mirrors`); needs `path:`, and can't sit beside a `Chart.yaml` |
+| `targetRevision` | no | `argocdAppLoader.source.targetRevision`, else `HEAD`; with `repoURL:`, `HEAD` | |
+| `path` | no | `<source.path>/<appsRoot>/<group>/<name>` | Override the source path |
 | `chart` | no | – | Upstream chart (`repo`, `name`/`path`, `version`, `mirror`) → multisource Application; see **Chart source** below |
 | `createNamespace` | no | `false` | Adds `CreateNamespace=true` to syncOptions |
 | `syncOptions` | no | `[]` | Extra sync options |
 | `syncPolicy` | no | (see below) | Replaces the default policy as written, so `createNamespace` and `syncOptions` no longer apply (put `syncOptions` inside it); `{}` means sync by hand |
 | `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps) |
-| `helm` | no | – | Extra `helm` block fields merged into the auto-built source |
+| `helm` | no | – | Extra `helm` block fields for the auto-built source; they win over the pinned `kubeVersion`/`apiVersions` |
+| `requires`, `provides` | no | – | Lists for `argocd-app-loader.check`; see **Checks across roots** below |
 | `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs). Missing or null gets the default |
 | `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through (`revisionHistoryLimit: 0` included) |
 
-> **Caveat — `sources` bypasses the cluster cascade.** The `.Values.cluster`
-> injection + tpl-rendered wrapper values happen only on the auto-built
-> single-`source` path. If you declare `sources:` (multi-source), they're emitted
-> verbatim and you must wire `helm.valuesObject` (incl. `cluster:`) into each
-> source yourself. A single-source wrapper with multiple `Chart.yaml`
-> dependencies covers most "combine charts" needs without this. If a genuine
-> multi-source need arises, the loader can be extended to inject the cascade into
-> each helm source.
+> **Caveat — `sources` bypasses the values file.** The tpl-rendered wrapper values reach
+> only the auto-built sources. If you declare `sources:`, they're emitted verbatim and you
+> wire `helm.valuesObject` into each source yourself. `sources:` replaces the app folder's
+> own chart, so a `Chart.yaml` beside it fails the render instead of being dropped. A
+> single-source wrapper with multiple `Chart.yaml` dependencies covers most "combine
+> charts" needs without this.
 >
 > **One exception: `repoURL` is resolved, not copied.** Each entry's `repoURL` goes
 > through the same `cluster.mirrors` lookup as `chart.repo` (an entry with `chart:` is
@@ -189,7 +181,7 @@ Instead of `repoURL`/`path`, an app may declare an upstream `chart:` block. The
 loader emits a **2-source** Application: source A = the upstream chart, source B =
 the app dir's own `Chart.yaml`/`templates/` (if present — for Ingress/ESO/CRs the
 upstream can't express). Wrapper values split: the `chart:` subtree → A, everything
-else (plus the `cluster` cascade) → B.
+else → B.
 
 One field names the **real upstream**; the type is inferred from it, strictly:
 
@@ -243,6 +235,51 @@ emitted public. A missing entry is never an error — the airgap **cold-start ru
 not fit the source type **is** an error, even while the method is disabled. Values are
 tpl-rendered, so `host`/`base` may reference other globals.
 
+#### Kustomize form (`kustomize/`)
+
+For an upstream chart whose values can't make a needed change, the app folder holds
+`kustomize/kustomization.yaml` (or `.yml`, or `Kustomization`) with `helmCharts:` and plain
+`patches:`. The loader emits `kustomize/` as a Kustomize source, plus the app's own `Chart.yaml`
+(if any) as a Helm source with the rendered values and `app.yaml`'s `helm:` block. Values without
+a `Chart.yaml` fail the render. Argo CD needs `kustomize.buildOptions: --enable-helm` in
+`argocd-cm`.
+
+```text
+apps/services/nexus/
+  app.yaml                  no chart: or sources: (the render fails if either is set)
+  kustomize/
+    kustomization.yaml      helmCharts: (repo, version, valuesInline or valuesFile) + patches:
+    patches/
+  Chart.yaml, templates/    optional: your own resources, as usual
+  values.yaml.gotmpl        values for your own chart only; a chart: block fails the render
+```
+
+The chart's `repo` in `kustomization.yaml` is literal, so `cluster.mirrors` doesn't apply to
+it, and upstream values there aren't templated.
+
+#### Per-app overrides (`cluster.overrides.<app>`)
+
+Merged over the app's rendered values file, last: maps merge, lists and scalars are replaced.
+`chart:` goes to the upstream chart as usual. A value that isn't a mapping fails the render.
+
+```yaml
+cluster:
+  overrides:
+    cilium:
+      chart:
+        devices: "eth+"
+```
+
+#### Pinned Kubernetes and API versions
+
+With `cluster.kubeVersion` (a quoted string) and `cluster.apiVersions` set, every Helm source
+gets `helm.kubeVersion`/`helm.apiVersions`, entries of a verbatim `sources:` list with `chart:` or
+`helm:` included, and a Kustomize source `kustomize.kubeVersion`/`apiVersions`. `.Capabilities`
+then comes from git instead of from whatever the live cluster has installed. Helm's built-in API
+versions stay; list the ones your charts check for, exactly as they check: a chart that tests
+`gateway.networking.k8s.io/v1/GatewayClass` doesn't match `gateway.networking.k8s.io/v1`. An app's
+own `helm:` block wins. Left out when unset.
+
 Default sync policy when `syncPolicy` is not declared:
 
 ```yaml
@@ -276,28 +313,24 @@ Recognised by the loader:
 
 | Key | Used for |
 |---|---|
-| `useLocalGit` (bool) | Toggles THIS repo (local charts, default `repoURL`) between `localGitRepo` and `remoteGitRepo` |
-| `localGitRepo`, `remoteGitRepo` | Source repo URLs (templated, may reference other globals) |
+| `apps` | On/off toggles, below |
+| `overrides` | Per-app values merged last — see **Per-app overrides** above |
+| `kubeVersion`, `apiVersions` | Pinned on every Helm and Kustomize source — see **Pinned Kubernetes and API versions** |
 | `clusterServer` | Application destination cluster (default `https://kubernetes.default.svc`) |
 | `argocdNamespace` | Where Application/AppProject CRs live (default `argocd`) |
-| `targetRevision` | Default revision for Applications (default `HEAD`) |
-| `repoBasePath` | Path prefix for the auto-built `path:` — set when the consumer chart is not at the repo root (default empty) |
 | `mirrors` | `{via, table}` upstream mirroring — see **Mirrors** above. The pre-0.8 keys (`useLocalRegistry`, `ociRepos`, `shimProxy`, `localRegistryHost`, `gitMirrors`, `localGitBase`) fail the render |
 
-Everything else under `cluster:` is forwarded into each wrapper release as
-`.Values.cluster.*`. It is injected under a `cluster:` key (not `global:`), so it
-reaches each wrapper's own templates but is **not** auto-propagated into upstream
-subcharts (no collisions with charts that read `global.*`).
+Nothing under `cluster:` reaches the apps by itself: a values file passes what its chart
+needs, e.g. `hostname: grafana.{{ .Values.cluster.domain }}`. The 0.8 key `repoBasePath` fails
+the render (now `argocdAppLoader.source.path`); `useLocalGit`, `remoteGitRepo`, `localGitRepo`
+and `targetRevision` are no longer read: resolve them where `argocdAppLoader.source` is set.
 
 ### App toggles (`.Values.cluster.apps`)
 
-Map of `<app-name>: bool`, declared **inside `cluster:`** so it cascades
-into every wrapper release alongside the rest of the globals. Wrappers
-can branch on whether peer apps are enabled — e.g. enable an OIDC
-provider in chart X only if `cluster.apps.authentik` is true. Default
-behavior requires explicit `true`; set
-`.Values.argocdAppLoader.requireToggle: false` to flip this so missing
-entries default to enabled.
+Map of `<app-name>: bool`. Values files can branch on whether peer apps are enabled — e.g.
+enable an OIDC provider in chart X only if `cluster.apps.authentik` is true. Default behavior
+requires explicit `true`; set `.Values.argocdAppLoader.requireToggle: false` to flip this so
+missing entries default to enabled.
 
 ```yaml
 cluster:
@@ -311,8 +344,40 @@ cluster:
 
 | Key | Default | Notes |
 |---|---|---|
-| `appsRoot` | `apps` | Root directory the loader scans |
-| `requireToggle` | `true` | If true, apps must be explicitly enabled in `.Values.apps` |
+| `source.repoURL` | – | Repo holding this chart's files; required once an app has files of its own. Templated |
+| `source.targetRevision` | `HEAD` | |
+| `source.path` | `""` | The chart's folder in that repo; `""` or `.` = the repo root |
+| `appsRoot` | `apps` | Root directory the loader scans, inside the chart; may be nested (`sub/apps`) |
+| `requireToggle` | `true` | If true, apps must be explicitly enabled in `.Values.cluster.apps` |
+
+### Checks across roots (`argocd-app-loader.check`)
+
+A separate include that renders nothing and fails on the first problem. Call it from a chart
+whose `.Files` hold every app root, e.g. a root of roots whose packages each render on their
+own:
+
+```yaml
+{{- include "argocd-app-loader.check" (dict "Root" $ "roots" (list
+      (dict "name" "core" "path" "packages/core/apps" "wave" 0 "on" true)
+      (dict "name" "platform" "path" "packages/platform/apps" "wave" 10 "on" true))) -}}
+```
+
+Without `roots` it checks the chart's own `appsRoot`; a root without `on` is on, without `wave`
+at 0. An app is on when its root is on and its toggle is. The render fails when:
+
+- an app that is on lists under `requires:` a name that no app that is on has as its name or
+  under `provides:` (the message names every dependent);
+- a required app comes later, comparing (root wave, app wave). The same wave passes: `requires:`
+  says an app needs the other on, not healthy first; a lower wave says that;
+- two roots hold the same app name (they share `cluster.apps`) or the same group (one AppProject);
+- `requires:`/`provides:` isn't a list, or names nothing that exists.
+
+```yaml
+# apps/observability/grafana/app.yaml
+requires:
+  - victoria-metrics-k8s-stack   # an app name
+  - storage.replicated           # or a capability some app provides:
+```
 
 ## Publishing & consuming
 
@@ -364,7 +429,9 @@ A loader change that alters output fails `task check`; see [test/README.md](test
 
 ## Status
 
-Pre-1.0. The API is settling. Pin a version in your dependency.
+Pre-1.0. The API is settling. Pin a version in your dependency. The next release (0.9) breaks
+0.8 consumers: `argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit`
+lookup, and `cluster:` is no longer injected into the apps.
 
 ## License
 

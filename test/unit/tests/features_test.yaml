@@ -1,0 +1,283 @@
+suite: features
+templates:
+  - render.yaml
+tests:
+  # Where the app's own files live: argocdAppLoader.source.
+  - it: points an app's local source at argocdAppLoader.source, below its path
+    set:
+      cluster.apps.plain: true
+      argocdAppLoader.source.path: packages/core
+      argocdAppLoader.source.targetRevision: v1.2.3
+    asserts:
+      - equal:
+          path: spec.source.repoURL
+          value: https://git.example.com/unit.git
+      - equal:
+          path: spec.source.targetRevision
+          value: v1.2.3
+      - equal:
+          path: spec.source.path
+          value: packages/core/apps/unit/plain
+
+  - it: treats an empty or "." source path as the repo root
+    set:
+      cluster.apps.plain: true
+      argocdAppLoader.source.path: "."
+    asserts:
+      - equal:
+          path: spec.source.path
+          value: apps/unit/plain
+
+  - it: fails without argocdAppLoader.source.repoURL when an app has files of its own
+    set:
+      cluster.apps.plain: true
+      argocdAppLoader.source: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocdAppLoader.source.repoURL is required: app plain has files of its own"
+
+  - it: fails on the removed cluster.repoBasePath
+    set:
+      cluster.repoBasePath: packages/core
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.repoBasePath was removed in 0.9"
+
+  - it: reads group and app from the end of the path, so appsRoot may be nested
+    set:
+      cluster.apps.inner: true
+      argocdAppLoader.appsRoot: nested/apps
+    asserts:
+      - equal:
+          path: metadata.name
+          value: inner
+      - equal:
+          path: spec.source.path
+          value: nested/apps/deep/inner
+
+  # Wrappers get only their own values.
+  - it: gives the local chart its values without the cluster block
+    set:
+      cluster.apps.wrapped: true
+    asserts:
+      - equal:
+          path: spec.sources[0].helm.valuesObject
+          value:
+            replicas: 1
+            args:
+              - --a
+      - equal:
+          path: spec.sources[1].helm.valuesObject
+          value:
+            route:
+              hostname: wrapped.example.com
+
+  # cluster.overrides.<app>
+  - it: merges cluster.overrides over the rendered values, replacing lists
+    set:
+      cluster.apps.wrapped: true
+      cluster.overrides.wrapped:
+        chart:
+          args:
+            - --b
+        route:
+          gateway: other
+    asserts:
+      - equal:
+          path: spec.sources[0].helm.valuesObject
+          value:
+            replicas: 1
+            args:
+              - --b
+      - equal:
+          path: spec.sources[1].helm.valuesObject
+          value:
+            route:
+              hostname: wrapped.example.com
+              gateway: other
+
+  - it: fails on an override that isn't a mapping
+    set:
+      cluster.apps.wrapped: true
+      cluster.overrides.wrapped: oops
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.overrides.wrapped must be a mapping of values, got string"
+
+  # Pinned versions.
+  - it: pins kubeVersion and apiVersions on every Helm source
+    set:
+      cluster.apps.wrapped: true
+      cluster.kubeVersion: "1.37.1"
+      cluster.apiVersions:
+        - monitoring.coreos.com/v1
+    asserts:
+      - equal:
+          path: spec.sources[0].helm.kubeVersion
+          value: "1.37.1"
+      - equal:
+          path: spec.sources[0].helm.apiVersions
+          value:
+            - monitoring.coreos.com/v1
+      - equal:
+          path: spec.sources[1].helm.kubeVersion
+          value: "1.37.1"
+
+  - it: lets an app's own helm block win over the pins
+    set:
+      cluster.apps.wrapped-helm: true
+      cluster.kubeVersion: "1.37.1"
+    asserts:
+      - equal:
+          path: spec.source.helm.kubeVersion
+          value: "1.30.0"
+
+  - it: leaves the pins out when none are set
+    set:
+      cluster.apps.plain: true
+    asserts:
+      - notExists:
+          path: spec.source.helm.kubeVersion
+      - notExists:
+          path: spec.source.helm.apiVersions
+
+  # Kustomize form.
+  - it: renders kustomize/ as a Kustomize source beside the local chart
+    set:
+      cluster.apps.kustomized: true
+      cluster.kubeVersion: "1.37.1"
+    asserts:
+      - equal:
+          path: spec.sources[0]
+          value:
+            repoURL: https://git.example.com/unit.git
+            targetRevision: HEAD
+            path: apps/unit/kustomized/kustomize
+            kustomize:
+              kubeVersion: "1.37.1"
+      - equal:
+          path: spec.sources[1].path
+          value: apps/unit/kustomized
+      - equal:
+          path: spec.sources[1].helm.valuesObject
+          value:
+            route:
+              hostname: kustomized
+
+  - it: renders kustomize/ alone when the app has no local chart
+    set:
+      cluster.apps.kustomize-only: true
+    asserts:
+      - lengthEqual:
+          path: spec.sources
+          count: 1
+      - notExists:
+          path: spec.sources[0].kustomize
+
+  - it: fails on kustomize/ next to a chart block
+    set:
+      cluster.apps.kustomize-chart: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "has kustomize/ and chart: in app.yaml"
+
+  - it: fails on a Kustomize-form app whose values have a chart block
+    set:
+      cluster.apps.kustomize-values-chart: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "app kustomize-values-chart uses the Kustomize form, so its values \\(values file or cluster.overrides\\) can.t have a chart: block"
+
+  - it: fails on sources next to a Chart.yaml instead of dropping the local chart
+    set:
+      cluster.apps.sources-chart: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "has sources: in app.yaml and a Chart.yaml"
+
+  # Review fixes.
+  - it: quotes the revision, so a tag like 1.10 stays a string
+    set:
+      cluster.apps.plain: true
+      argocdAppLoader.source.targetRevision: "1.10"
+    asserts:
+      - equal:
+          path: spec.source.targetRevision
+          value: "1.10"
+
+  - it: fails on an unquoted kubeVersion, which YAML reads as a number
+    set:
+      cluster.apps.plain: true
+      cluster.kubeVersion: 1.30
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.kubeVersion must be a string, so quote it"
+
+  - it: pins the Helm sources of a verbatim sources list, and leaves git sources alone
+    set:
+      cluster.apps.verbatim: true
+      cluster.kubeVersion: "1.37.1"
+    asserts:
+      - equal:
+          path: spec.sources[0].helm.kubeVersion
+          value: "1.37.1"
+      - notExists:
+          path: spec.sources[1].helm
+
+  - it: gives a Kustomize-form app's helm block to its local chart
+    set:
+      cluster.apps.kustomized-helm: true
+    asserts:
+      - equal:
+          path: spec.sources[1].helm.skipCrds
+          value: true
+
+  - it: fails on a Kustomize-form app with values but no Chart.yaml
+    set:
+      cluster.apps.kustomize-values-only: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "app kustomize-values-only has values but no Chart.yaml to take them"
+
+  - it: finds kustomize/kustomization.yml too
+    set:
+      cluster.apps.kustomize-yml: true
+    asserts:
+      - equal:
+          path: spec.sources[0].path
+          value: apps/unit/kustomize-yml/kustomize
+
+  - it: fails on repoURL next to a Chart.yaml instead of dropping the local chart
+    set:
+      cluster.apps.external-chart: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "has repoURL: in app.yaml and a Chart.yaml"
+
+  - it: gives an app in another repo that repo's HEAD and its own path, not this chart's
+    set:
+      cluster.apps.external: true
+      argocdAppLoader.source.targetRevision: v9
+      argocdAppLoader.source.path: packages/core
+    asserts:
+      - equal:
+          path: spec.source.targetRevision
+          value: HEAD
+      - equal:
+          path: spec.source.path
+          value: deploy
+
+  - it: fails on an app in another repo without a path
+    set:
+      cluster.apps.external-nopath: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "app external-nopath sets repoURL:, so it needs path: too"
+
+  - it: names cluster.overrides when an override gives a Kustomize-form app a chart block
+    set:
+      cluster.apps.kustomize-only: true
+      cluster.overrides.kustomize-only.chart.x: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "its values \\(values file or cluster.overrides\\) can't have a chart: block"

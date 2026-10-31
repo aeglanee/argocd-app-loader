@@ -2,11 +2,6 @@ cluster:
   domain: example.com
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
-  targetRevision: HEAD
-  useLocalGit: false
-  remoteGitRepo: "git@github.com:example/cluster.git"
-  localGitRepo: "git@gitea.{{ .Values.cluster.domain }}:example/cluster.git"
-  repoBasePath: examples/consumer
 
   # Chart/git MIRRORS. Apps always declare their real upstream (chart.repo); this block
   # decides whether a source is pulled through a local mirror instead. Private only when
@@ -32,11 +27,19 @@ cluster:
         via: forgejo
         repo: rustfs-operator
 
-  # App on/off toggles live under cluster.apps so they cascade into every
-  # wrapper release (wrappers can branch on peer-app toggles).
+  # App on/off toggles. Values files can read them too (e.g. to branch on a peer app).
   apps:
     hello: true
     gitchart: true
     httpchart: true
     wraponly: true
     wrapped: true
+    patched: true
+
+# Where this chart's own files live. The loader points each app's local chart here; Helm can't
+# tell on its own where a chart sits in its repo.
+argocdAppLoader:
+  source:
+    repoURL: "git@github.com:example/cluster.git"
+    targetRevision: HEAD
+    path: examples/consumer

@@ -11,7 +11,6 @@ cluster:
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
   targetRevision: HEAD
-  repoBasePath: "" # the chart sits at the repo root
   network:
     apiServer: "192.0.2.6" # VIP (kube-apiserver); cilium uses KubePrism instead
     apiPort: 6443
@@ -181,3 +180,9 @@ cluster:
       enabled: false
       enforce: false
       hostFirewall: false
+# Fixture only: what the root of roots passes a package, here for the whole chart at the repo root.
+argocdAppLoader:
+  source:
+    repoURL: "https://github.com/{{ .Values.cluster.githubUser }}/gitops.git"
+    targetRevision: HEAD
+    path: ""

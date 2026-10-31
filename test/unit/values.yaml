@@ -1,3 +1,6 @@
+argocdAppLoader:
+  source:
+    repoURL: https://git.example.com/unit.git
 cluster:
-  remoteGitRepo: https://git.example.com/unit.git
+  domain: example.com
   apps: {}

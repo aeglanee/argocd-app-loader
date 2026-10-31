@@ -26,3 +26,7 @@ cluster:
     garage: false
     renovate: false
     radar: false
+# useLocalGit is resolved by the root of roots, which passes the result here.
+argocdAppLoader:
+  source:
+    repoURL: "http://forgejo-http.forgejo.svc:3000/{{ .Values.cluster.forgejoUser }}/gitops"

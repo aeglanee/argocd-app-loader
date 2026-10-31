@@ -1,0 +1,9 @@
+# sources: as written; a Helm source gets the pins.
+project: unit
+sources:
+  - repoURL: https://charts.example.com
+    chart: upstream
+    targetRevision: 1.0.0
+  - repoURL: https://git.example.com/other.git
+    path: deploy
+    targetRevision: v1

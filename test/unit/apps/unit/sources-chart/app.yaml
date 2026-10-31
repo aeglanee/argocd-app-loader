@@ -1,0 +1,6 @@
+# Invalid: sources: would silently replace the local chart beside it.
+project: unit
+sources:
+  - repoURL: https://git.example.com/other.git
+    path: deploy
+    targetRevision: v1

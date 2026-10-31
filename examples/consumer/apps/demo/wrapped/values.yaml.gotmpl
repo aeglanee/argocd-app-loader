@@ -3,3 +3,7 @@ chart:                                  # → source A (upstream podinfo)
   ui:
     message: "from {{ .Values.cluster.domain }}"
 localGreeting: "hi-from-{{ .Values.cluster.domain }}"   # → source B (local chart)
+# The local chart's templates read these; the loader passes only what this file says.
+cluster:
+  argocdNamespace: {{ .Values.cluster.argocdNamespace | toJson }}
+  domain: {{ .Values.cluster.domain | toJson }}

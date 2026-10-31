@@ -9,25 +9,46 @@
     group     : group folder name (also default project)
     appMeta   : parsed app.yaml content (may carry any Application spec field)
     groupMeta : parsed _group.yaml content (fallbacks for project/etc)
+    appDir    : the app folder inside the consumer chart (<appsRoot>/<group>/<name>)
+    hasLocalChart, hasKustomize : what the app folder holds
     cluster   : .Values.cluster from the consumer chart
     Values    : full consumer .Values (so tpl works against it)
 */ -}}
 {{- define "argocd-app-loader.application" -}}
 {{- /* Bound once: `range` rebinds the dot, so .cluster is not reachable inside the loops below. */ -}}
 {{- $cluster := .cluster -}}
-{{- $defaultRepo := ternary .cluster.localGitRepo .cluster.remoteGitRepo (default false .cluster.useLocalGit) -}}
 {{- $project := .appMeta.project | default .groupMeta.project | default .group -}}
 {{- $namespace := .appMeta.namespace | default .name -}}
 {{- $releaseName := .appMeta.releaseName | default .name -}}
-{{- $base := default "" .cluster.repoBasePath -}}
-{{- $appPath := .appMeta.path -}}
-{{- if not $appPath -}}
-  {{- if $base -}}
-    {{- $appPath = printf "%s/apps/%s/%s" $base .group .name -}}
-  {{- else -}}
-    {{- $appPath = printf "apps/%s/%s" .group .name -}}
-  {{- end -}}
+{{- /*
+  Where this chart's own files live: Helm's .Files can't tell where the chart sits in its repo, so
+  the consumer says so in argocdAppLoader.source. Read only when an app has files of its own.
+*/ -}}
+{{- $own := default dict (get (default dict .Values.argocdAppLoader) "source") -}}
+{{- $ownRepo := "" -}}
+{{- if or .hasLocalChart .hasKustomize (not (or .appMeta.chart .appMeta.sources .appMeta.repoURL)) -}}
+  {{- $ownRepo = tpl (toString (required (printf "argocd-app-loader: argocdAppLoader.source.repoURL is required: app %s has files of its own in this chart's repo (0.8's cluster.remoteGitRepo, localGitRepo and useLocalGit are no longer read)" .name) $own.repoURL)) .Root -}}
 {{- end -}}
+{{- $base := trimSuffix "/" (trimPrefix "./" (toString (default "" $own.path))) -}}
+{{- $ownRevision := .appMeta.targetRevision | default $own.targetRevision | default "HEAD" -}}
+{{- $appPath := .appMeta.path | default (ternary .appDir (printf "%s/%s" $base .appDir) (or (eq $base "") (eq $base "."))) -}}
+{{- if .appMeta.repoURL -}}
+  {{- /* Another repo: this chart's revision and folder layout mean nothing there. */ -}}
+  {{- $ownRevision = .appMeta.targetRevision | default "HEAD" -}}
+  {{- $appPath = required (printf "argocd-app-loader: app %s sets repoURL:, so it needs path: too (the folder in that repo)" .name) .appMeta.path -}}
+{{- end -}}
+{{- /* Pinned so the render doesn't depend on what the live cluster happens to have installed. */ -}}
+{{- $pins := dict -}}
+{{- with .cluster.kubeVersion -}}
+  {{- if not (kindIs "string" .) -}}
+    {{- fail (printf "argocd-app-loader: cluster.kubeVersion must be a string, so quote it (got %v, which YAML reads as a %s)" . (kindOf .)) -}}
+  {{- end -}}
+  {{- $_ := set $pins "kubeVersion" . -}}
+{{- end -}}
+{{- with .cluster.apiVersions }}{{ $_ := set $pins "apiVersions" . }}{{ end -}}
+{{- /* An app's own helm: block wins over the pins (it is written after them, so drop them here). */ -}}
+{{- $helmPins := deepCopy $pins -}}
+{{- range $k := keys (default dict .appMeta.helm) }}{{ $_ := unset $helmPins $k }}{{ end -}}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -71,9 +92,7 @@ spec:
     wrapperValues `chart:` → A, everything else → B.
   */ -}}
   {{- $c := .appMeta.chart -}}
-  {{- /* source A = the UPSTREAM chart's values ONLY. The cluster cascade is NOT injected here:
-         charts with a strict values.schema.json (additionalProperties:false, e.g. cert-manager)
-         reject the unknown `cluster:` key. cluster goes to source B (the local chart). */ -}}
+  {{- /* source A gets the `chart:` subtree of the wrapper values, source B the rest. */ -}}
   {{- $chartValues := default dict (get (default dict .wrapperValues) "chart") -}}
   {{- $localValues := omit (default dict .wrapperValues) "chart" -}}
   {{- $kind := include "argocd-app-loader.chartKind" $c -}}
@@ -91,17 +110,34 @@ spec:
         releaseName: {{ $releaseName }}
         valuesObject:
 {{ toYaml $chartValues | indent 10 }}
+        {{- with $helmPins }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .appMeta.helm }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     {{- if .hasLocalChart }}
-    - repoURL: {{ tpl (toString $defaultRepo) .Root | quote }}
-      targetRevision: {{ .appMeta.targetRevision | default .cluster.targetRevision | default "HEAD" }}
-      path: {{ $appPath }}
-      helm:
-        releaseName: {{ $releaseName }}
-        valuesObject:
-{{ toYaml (mustMergeOverwrite (deepCopy $localValues) (dict "cluster" .cluster)) | indent 10 }}
+    {{- include "argocd-app-loader.ownChartSource" (dict "repoURL" $ownRepo "targetRevision" $ownRevision "path" $appPath "releaseName" $releaseName "values" $localValues "pins" $pins) | nindent 4 }}
+    {{- end }}
+  {{- else if .hasKustomize }}
+  {{- /* Kustomize form: Kustomize renders kustomize/ (helmCharts: + patches:), the local chart the
+         rest. Upstream values live in kustomize/, so a values `chart:` block has nowhere to go. */ -}}
+  {{- if hasKey (default dict .wrapperValues) "chart" -}}
+    {{- fail (printf "argocd-app-loader: app %s uses the Kustomize form, so its values (values file or cluster.overrides) can't have a chart: block; put the upstream chart's values in kustomize/ (helmCharts valuesFile or valuesInline)" .name) -}}
+  {{- end -}}
+  {{- if and .wrapperValues (not .hasLocalChart) -}}
+    {{- fail (printf "argocd-app-loader: app %s has values but no Chart.yaml to take them; the Kustomize form's upstream values live in kustomize/" .name) -}}
+  {{- end }}
+  sources:
+    - repoURL: {{ $ownRepo | quote }}
+      targetRevision: {{ $ownRevision | quote }}
+      path: {{ $appPath }}/kustomize
+      {{- with $pins }}
+      kustomize:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- if .hasLocalChart }}
+    {{- include "argocd-app-loader.ownChartSource" (dict "repoURL" $ownRepo "targetRevision" $ownRevision "path" $appPath "releaseName" $releaseName "values" (default dict .wrapperValues) "pins" $helmPins "helm" .appMeta.helm) | nindent 4 }}
     {{- end }}
   {{- else if .appMeta.sources }}
   {{- /* Verbatim multi-source passthrough — for apps that are not a Helm chart at all (raw
@@ -112,6 +148,10 @@ spec:
   sources:
     {{- range $src := .appMeta.sources }}
     {{- $s := omit (deepCopy $src) "mirror" -}}
+    {{- /* A Helm source (chart: or helm:) gets the pins too, unless it sets them itself. */ -}}
+    {{- if and $pins (or $s.chart $s.helm) -}}
+      {{- $_ := set $s "helm" (mustMergeOverwrite (deepCopy $pins) (default dict $s.helm)) -}}
+    {{- end -}}
     {{- if $s.repoURL -}}
       {{- $u := toString $s.repoURL -}}
       {{- $k := "git" -}}
@@ -125,34 +165,25 @@ spec:
   {{- else }}
   source:
     {{- /* An explicit appMeta.repoURL may point at an external repo, so it goes through
-           cluster.mirrors as a git source. The default (this repo, via useLocalGit) is already
-           toggled and is emitted as-is. */}}
+           cluster.mirrors as a git source. The default (argocdAppLoader.source) is emitted
+           as given. */}}
     {{- if .appMeta.repoURL }}
     repoURL: {{ include "argocd-app-loader.mirrorURL" (dict "url" .appMeta.repoURL "kind" "git" "mirror" (eq (include "argocd-app-loader.mirrorFlag" .appMeta.mirror) "true") "cluster" $cluster "Root" .Root) | quote }}
     {{- else }}
-    repoURL: {{ tpl (toString $defaultRepo) .Root | quote }}
+    repoURL: {{ $ownRepo | quote }}
     {{- end }}
-    targetRevision: {{ .appMeta.targetRevision | default .cluster.targetRevision | default "HEAD" }}
+    targetRevision: {{ $ownRevision | quote }}
     path: {{ $appPath }}
     helm:
       releaseName: {{ $releaseName }}
-      # Per-source value handling:
-      #   - .wrapperValues: the wrapper's own values.yaml, already tpl-rendered
-      #     against the consumer chart context by the loader so cross-cutting
-      #     references like {{ .Values.cluster.domain }} resolve.
-      #   - cluster: cluster identity/config, recursively overwritten on top so
-      #     cluster identity always wins over per-app declarations. Injected
-      #     under `cluster:` (NOT `global:`) so it cascades into THIS wrapper's
-      #     own templates (as .Values.cluster.*) WITHOUT silently propagating
-      #     into upstream subcharts via Helm's global mechanism — which would
-      #     risk collisions with charts that read global.* (imageRegistry,
-      #     storageClass, imagePullSecrets, ...). To deliberately feed an
-      #     upstream chart a real Helm global, set `global:` explicitly in that
-      #     wrapper's own values.
-      # Both go through valuesObject so we deliver structured YAML rather than
-      # a string blob — easier for ArgoCD to diff and for humans to read.
+      {{- /* The wrapper's values, already tpl-rendered against the consumer chart, so
+             {{ .Values.cluster.domain }} in them has resolved. Nothing else is added: a wrapper's
+             templates see only what its values file passes. */}}
       valuesObject:
-{{ toYaml (mustMergeOverwrite (deepCopy (default dict .wrapperValues)) (dict "cluster" .cluster)) | indent 8 }}
+{{ toYaml (default dict .wrapperValues) | indent 8 }}
+      {{- with $helmPins }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
       {{- with .appMeta.helm }}
       {{- toYaml . | nindent 6 }}
       {{- end }}
@@ -186,4 +217,25 @@ spec:
   {{- if not (kindIs "invalid" .appMeta.revisionHistoryLimit) }}
   revisionHistoryLimit: {{ .appMeta.revisionHistoryLimit }}
   {{- end }}
+{{- end -}}
+
+
+{{- /*
+  argocd-app-loader.ownChartSource — the app folder's own chart (Chart.yaml + templates/) as one
+  entry of `sources:`, beside an upstream chart or a Kustomize source.
+*/ -}}
+{{- define "argocd-app-loader.ownChartSource" -}}
+- repoURL: {{ .repoURL | quote }}
+  targetRevision: {{ .targetRevision | quote }}
+  path: {{ .path }}
+  helm:
+    releaseName: {{ .releaseName }}
+    valuesObject:
+{{ toYaml .values | indent 6 }}
+    {{- with .pins }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .helm }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end -}}

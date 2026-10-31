@@ -1,0 +1,4 @@
+# Another repo: its own revision (HEAD unless set) and path.
+project: unit
+repoURL: https://git.example.com/other.git
+path: deploy
