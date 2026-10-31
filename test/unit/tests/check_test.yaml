@@ -55,7 +55,7 @@ tests:
           on: true
     asserts:
       - failedTemplate:
-          errorPattern: "everything providing csi \\(base\\)"
+          errorPattern: "everything providing csi \\(base\\) is off because a is off, but user requires it — switch it off first, or switch base or a on"
 
   - it: fails on a requirement nothing is named or provides
     set:

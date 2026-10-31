@@ -52,6 +52,7 @@
     {{- $_ := set $apps $name (dict
           "dir" (dir $path)
           "on" $on
+          "offRoot" (ternary "" $r.name $rootOn)
           "requires" (default list $meta.requires)
           "provides" (default list $meta.provides)
           "order" (list (int $r.wave) (int (default 0 $meta.wave)))
@@ -91,8 +92,12 @@
         {{- if not (and (eq (len $candidates) 1) (eq (first $candidates) $req)) -}}
           {{- $what = printf "everything providing %s (%s)" $req (join ", " $candidates) -}}
         {{- end -}}
+        {{- $offRoots := list -}}
+        {{- range $c := $candidates }}{{ with (get $apps $c).offRoot }}{{ $offRoots = append $offRoots . }}{{ end }}{{ end -}}
+        {{- $because := "" -}}
+        {{- if $offRoots }}{{ $because = printf " because %s is off" (join " and " (uniq $offRoots)) }}{{ end -}}
         {{- $one := eq (len $dependents) 1 -}}
-        {{- fail (printf "argocd-app-loader: %s is off, but %s require%s it — switch %s off first, or switch %s on" $what (join ", " $dependents) (ternary "s" "" $one) (ternary "it" "them" $one) (join " or " $candidates)) -}}
+        {{- fail (printf "argocd-app-loader: %s is off%s, but %s require%s it — switch %s off first, or switch %s on" $what $because (join ", " $dependents) (ternary "s" "" $one) (ternary "it" "them" $one) (join " or " (concat $candidates (uniq $offRoots)))) -}}
       {{- end -}}
       {{- $early := false -}}
       {{- range $m := $met -}}
