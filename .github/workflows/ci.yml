@@ -22,8 +22,16 @@ jobs:
         with:
           version: 3.53.1
 
+      # v1.2.1, the flake's kubernetes-helmPlugins.helm-unittest, pinned to the tag's commit like the
+      # actions above. Helm 4 refuses a git source without --verify=false: "plugin source does not
+      # support verification".
+      - name: helm-unittest
+        run: >-
+          helm plugin install https://github.com/helm-unittest/helm-unittest
+          --version 67056cc631eab9e001e6762a1f601e6c92a71ba7 --verify=false
+
       - name: pre-commit
         run: pipx run pre-commit==4.7.0 run --all-files --show-diff-on-failure
 
-      - name: lint + golden renders
+      - name: lint, unit tests, golden renders
         run: task check

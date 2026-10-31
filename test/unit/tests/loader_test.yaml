@@ -1,0 +1,20 @@
+suite: loader
+templates:
+  - render.yaml
+tests:
+  - it: renders an enabled app as an Application
+    set:
+      cluster.apps.plain: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Application
+      - equal:
+          path: metadata.name
+          value: plain
+
+  - it: skips an app without a toggle
+    asserts:
+      - hasDocuments:
+          count: 0

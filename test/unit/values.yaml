@@ -1,0 +1,3 @@
+cluster:
+  remoteGitRepo: https://git.example.com/unit.git
+  apps: {}

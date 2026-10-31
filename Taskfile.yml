@@ -16,9 +16,16 @@ tasks:
         helm template cluster test/fixtures/gitops --namespace argocd
         -f test/fixtures/gitops/cluster-values.yaml > test/golden/gitops.yaml
 
+  unit:
+    desc: Run the helm-unittest suites in test/unit/
+    cmds:
+      - rm -rf test/unit/charts test/unit/Chart.lock && helm dependency build test/unit >/dev/null
+      - helm unittest test/unit
+
   check:
-    desc: Lint the chart and fail if a render differs from its committed golden file
+    desc: Lint the chart, run the unit tests and fail if a render differs from its committed golden file
     cmds:
       - helm lint .
+      - task: unit
       - task: golden
       - git diff --exit-code -- test/golden

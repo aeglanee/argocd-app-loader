@@ -1,8 +1,8 @@
 # Tests
 
-`task check` lints the chart, renders every fixture against this checkout of the loader and fails
-if a render differs from its committed file in `golden/`. After a deliberate change, run
-`task golden`, review the diff, and commit it with the change.
+`task check` lints the chart, runs the unit tests, renders every fixture against this checkout of
+the loader and fails if a render differs from its committed file in `golden/`. After a deliberate
+change, run `task golden`, review the diff, and commit it with the change.
 
 | Fixture | Rendered into | Source |
 |---|---|---|
@@ -17,3 +17,10 @@ Applications and AppProjects. It is not kept in sync with gitops.
 
 The full copy is temporary: it guards the loader workover against changes nobody intended. Once
 gitops renders the loader in its own CI, shrink it to one app per shape.
+
+## Unit tests
+
+`task unit` runs the [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites in
+`unit/tests/`. A library chart can't be tested on its own, so `unit/` is a consumer whose fixture
+apps sit under `unit/apps/unit/`, each switched on only by the tests that need it. Golden renders
+show what changed; unit tests pin behaviour the goldens can't show, such as a render that must fail.
