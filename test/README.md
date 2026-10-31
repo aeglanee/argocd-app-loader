@@ -9,6 +9,7 @@ change.
 |---|---|---|
 | `examples/consumer` | `golden/example.yaml` | the README example |
 | `fixtures/gitops` | `golden/gitops.yaml` | frozen copy of the real consumer |
+| `fixtures/gitops` + `second-cluster-values.yaml` | `golden/gitops-second.yaml` | a made-up second cluster, as a delta layered over the first |
 
 `fixtures/gitops` holds only what the loader reads (`app.yaml`, `_group.yaml`, `Chart.yaml`,
 `values.yaml`, `values.yaml.gotmpl`, `templates/render.yaml`), copied on 2026-10-29 from

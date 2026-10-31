@@ -1,0 +1,28 @@
+# A made-up second cluster, layered over cluster-values.yaml (`-f cluster-values.yaml -f this`)
+# the way clusters/<name>.yaml will be layered over common.yaml. It holds only the delta, and it
+# guards the multi-cluster case while only one real cluster exists: other picks, the git mirror
+# off, the OCI and HTTP-repo mirrors on, and the gitops repo read from the cluster's own Forgejo.
+cluster:
+  name: kur
+  domain: kur.example.net
+  network:
+    apiServer: "10.20.0.5"
+    lbPoolStart: "10.20.0.10"
+    lbPoolStop: "10.20.0.30"
+    coreDnsIp: "10.20.0.20"
+    gatewayIp: "10.20.0.10"
+  useLocalGit: true
+  mirrors:
+    via:
+      harbor:
+        enabled: true
+      shim:
+        enabled: true
+      forgejo:
+        enabled: false
+  apps:
+    forgejo-runner: false
+    ghostfolio: false
+    garage: false
+    renovate: false
+    radar: false

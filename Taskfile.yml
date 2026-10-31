@@ -20,6 +20,10 @@ tasks:
       - >-
         helm template cluster test/fixtures/gitops --namespace argocd
         -f test/fixtures/gitops/cluster-values.yaml > test/golden/gitops.yaml
+      - >-
+        helm template cluster test/fixtures/gitops --namespace argocd
+        -f test/fixtures/gitops/cluster-values.yaml -f test/fixtures/gitops/second-cluster-values.yaml
+        > test/golden/gitops-second.yaml
 
   unit:
     desc: Run the helm-unittest suites in test/unit/
