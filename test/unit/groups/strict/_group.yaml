@@ -2,3 +2,5 @@
 description: allows nothing it doesn't list
 sourceRepos: []
 clusterResourceWhitelist: []
+namespaceResourceWhitelist: []
+orphanedResources: {}

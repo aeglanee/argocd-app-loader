@@ -85,6 +85,22 @@ tests:
       - notExists:
           path: metadata.finalizers
 
+  - it: renders a wrong-typed finalizers value as written instead of the default
+    set:
+      cluster.apps.finalizers-string: true
+    asserts:
+      - equal:
+          path: metadata.finalizers
+          value: resources-finalizer.argocd.argoproj.io/background
+
+  - it: keeps revisionHistoryLimit 0
+    set:
+      cluster.apps.history-zero: true
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 0
+
   - it: keeps an explicit empty syncPolicy (sync by hand)
     set:
       cluster.apps.manual-sync: true
@@ -110,3 +126,17 @@ tests:
           value:
             - namespace: "*"
               server: "*"
+      - equal:
+          path: spec.namespaceResourceWhitelist
+          value: []
+      - equal:
+          path: spec.orphanedResources
+          value: {}
+
+  - it: renders a wrong-typed AppProject list as written instead of allowing everything
+    set:
+      argocdAppLoader.appsRoot: groups-typo
+    asserts:
+      - equal:
+          path: spec.sourceRepos
+          value: https://git.example.com/only-this.git

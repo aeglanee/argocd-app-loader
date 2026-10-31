@@ -52,8 +52,9 @@ metadata:
   labels:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- /* kindIs, not `default`: `default` treats an explicit `finalizers: []` as unset. */ -}}
-  {{- with ternary .appMeta.finalizers (list "resources-finalizer.argocd.argoproj.io") (kindIs "slice" .appMeta.finalizers) }}
+  {{- /* Present is rendered as written (`[]` = none; a wrong type fails validation); missing or null
+         gets the default. Not `default`: it treats an explicit `finalizers: []` as unset. */ -}}
+  {{- with ternary .appMeta.finalizers (list "resources-finalizer.argocd.argoproj.io") (not (kindIs "invalid" .appMeta.finalizers)) }}
   finalizers:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -172,8 +173,8 @@ spec:
     {{- if $syncOptions -}}
       {{- $_ := set $defaultSyncPolicy "syncOptions" $syncOptions -}}
     {{- end -}}
-    {{- /* An explicit `syncPolicy: {}` means sync by hand, so it must not fall back to the default. */ -}}
-    {{- toYaml (ternary .appMeta.syncPolicy $defaultSyncPolicy (kindIs "map" .appMeta.syncPolicy)) | nindent 4 }}
+    {{- /* A present syncPolicy replaces the default as written: `{}` means sync by hand. */ -}}
+    {{- toYaml (ternary .appMeta.syncPolicy $defaultSyncPolicy (not (kindIs "invalid" .appMeta.syncPolicy))) | nindent 4 }}
   {{- with .appMeta.ignoreDifferences }}
   ignoreDifferences:
     {{- toYaml . | nindent 4 }}
@@ -182,7 +183,7 @@ spec:
   info:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .appMeta.revisionHistoryLimit }}
-  revisionHistoryLimit: {{ . }}
+  {{- if not (kindIs "invalid" .appMeta.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .appMeta.revisionHistoryLimit }}
   {{- end }}
 {{- end -}}

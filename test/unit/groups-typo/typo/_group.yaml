@@ -1,0 +1,2 @@
+# A list written without `- `: rendered as written so validation rejects it, never widened to `*`.
+sourceRepos: https://git.example.com/only-this.git

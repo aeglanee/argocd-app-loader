@@ -25,40 +25,44 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- /* kindIs, not `default`: an explicit `[]` (allow nothing) must not widen to `*`. */}}
+  {{- /*
+    A field that is present is rendered as written, even when empty: `[]` allows nothing, and a
+    wrong type fails validation instead of widening to `*`. Only a missing or null field gets the
+    default (or is left out). Not `default`/`with`: both treat an empty list or map as unset.
+  */}}
   description: {{ .meta.description | default .name | quote }}
   sourceRepos:
-    {{- toYaml (ternary .meta.sourceRepos (list "*") (kindIs "slice" .meta.sourceRepos)) | nindent 4 }}
+    {{- toYaml (ternary .meta.sourceRepos (list "*") (not (kindIs "invalid" .meta.sourceRepos))) | nindent 4 }}
   destinations:
-    {{- toYaml (ternary .meta.destinations (list (dict "namespace" "*" "server" "*")) (kindIs "slice" .meta.destinations)) | nindent 4 }}
+    {{- toYaml (ternary .meta.destinations (list (dict "namespace" "*" "server" "*")) (not (kindIs "invalid" .meta.destinations))) | nindent 4 }}
   clusterResourceWhitelist:
-    {{- toYaml (ternary .meta.clusterResourceWhitelist (list (dict "group" "*" "kind" "*")) (kindIs "slice" .meta.clusterResourceWhitelist)) | nindent 4 }}
-  {{- with .meta.clusterResourceBlacklist }}
+    {{- toYaml (ternary .meta.clusterResourceWhitelist (list (dict "group" "*" "kind" "*")) (not (kindIs "invalid" .meta.clusterResourceWhitelist))) | nindent 4 }}
+  {{- if not (kindIs "invalid" .meta.clusterResourceBlacklist) }}
   clusterResourceBlacklist:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.clusterResourceBlacklist | nindent 4 }}
   {{- end }}
-  {{- with .meta.namespaceResourceWhitelist }}
+  {{- if not (kindIs "invalid" .meta.namespaceResourceWhitelist) }}
   namespaceResourceWhitelist:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.namespaceResourceWhitelist | nindent 4 }}
   {{- end }}
-  {{- with .meta.namespaceResourceBlacklist }}
+  {{- if not (kindIs "invalid" .meta.namespaceResourceBlacklist) }}
   namespaceResourceBlacklist:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.namespaceResourceBlacklist | nindent 4 }}
   {{- end }}
-  {{- with .meta.roles }}
+  {{- if not (kindIs "invalid" .meta.roles) }}
   roles:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.roles | nindent 4 }}
   {{- end }}
-  {{- with .meta.signatureKeys }}
+  {{- if not (kindIs "invalid" .meta.signatureKeys) }}
   signatureKeys:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.signatureKeys | nindent 4 }}
   {{- end }}
-  {{- with .meta.orphanedResources }}
+  {{- if not (kindIs "invalid" .meta.orphanedResources) }}
   orphanedResources:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.orphanedResources | nindent 4 }}
   {{- end }}
-  {{- with .meta.syncWindows }}
+  {{- if not (kindIs "invalid" .meta.syncWindows) }}
   syncWindows:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml .meta.syncWindows | nindent 4 }}
   {{- end }}
 {{- end -}}

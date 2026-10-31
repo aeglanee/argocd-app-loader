@@ -147,11 +147,11 @@ through. Common fields:
 | `chart` | no | – | Upstream chart (`repo`, `name`/`path`, `version`, `mirror`) → multisource Application; see **Chart source** below |
 | `createNamespace` | no | `false` | Adds `CreateNamespace=true` to syncOptions |
 | `syncOptions` | no | `[]` | Extra sync options |
-| `syncPolicy` | no | (see below) | Full override of the default policy; `{}` means sync by hand |
+| `syncPolicy` | no | (see below) | Replaces the default policy as written, so `createNamespace` and `syncOptions` no longer apply (put `syncOptions` inside it); `{}` means sync by hand |
 | `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps) |
 | `helm` | no | – | Extra `helm` block fields merged into the auto-built source |
-| `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs) |
-| `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through |
+| `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs). Missing or null gets the default |
+| `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through (`revisionHistoryLimit: 0` included) |
 
 > **Caveat — `sources` bypasses the cluster cascade.** The `.Values.cluster`
 > injection + tpl-rendered wrapper values happen only on the auto-built
@@ -249,16 +249,14 @@ Default sync policy when `syncPolicy` is not declared:
 syncPolicy:
   automated: { prune: true, selfHeal: true }
   retry: { limit: 10, backoff: { duration: 30s, factor: 2, maxDuration: 5m } }
-  syncOptions: [ … from createNamespace + syncOptions … ]
+  syncOptions: [ … from createNamespace + syncOptions; left out when both are empty … ]
 ```
 
 ### `_group.yaml` (per-group AppProject metadata)
 
-Permissive — any field accepted in an Argo CD `AppProject` spec passes
-through. Common fields:
-
-An explicit empty list (`sourceRepos: []` and so on) is kept as written, so it allows
-nothing; only a missing field gets the default.
+The loader renders the fields below; other `AppProject` spec fields are ignored. A field
+that is present is rendered as written, even when empty: `sourceRepos: []` allows nothing.
+Only a missing or null field (`sourceRepos:` with nothing under it) gets the default.
 
 | Field | Default | Notes |
 |---|---|---|
@@ -266,7 +264,7 @@ nothing; only a missing field gets the default.
 | `sourceRepos` | `["*"]` | Whitelist of repos apps in this project may pull from |
 | `destinations` | `[{namespace: "*", server: "*"}]` | Whitelist of `{server, namespace}` pairs |
 | `clusterResourceWhitelist` | `[{group: "*", kind: "*"}]` | Allowed cluster-scoped resources |
-| `namespaceResourceWhitelist`, `clusterResourceBlacklist`, `namespaceResourceBlacklist` | – | Pass through |
+| `namespaceResourceWhitelist`, `clusterResourceBlacklist`, `namespaceResourceBlacklist` | – | As written |
 | `roles` | – | Project-level RBAC |
 | `signatureKeys` | – | Require signed commits |
 | `orphanedResources` | – | Warn / auto-prune |
