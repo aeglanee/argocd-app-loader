@@ -1,0 +1,17 @@
+# Only the library itself belongs in the package. Without this, every consumer that pulls the loader
+# through file:// (the example, the gitops fixture, the unit-test chart) packages the whole repo,
+# including the other consumers' charts/*.tgz, so the tarballs nest inside each other and grow on
+# every run until Helm refuses them.
+.git
+.github/
+.gitignore
+.helmignore
+.markdownlint.yaml
+.pre-commit-config.yaml
+.yamllint
+examples/
+flake.lock
+flake.nix
+Taskfile.yml
+test/
+*.tgz
