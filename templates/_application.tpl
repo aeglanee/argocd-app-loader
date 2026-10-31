@@ -52,8 +52,11 @@ metadata:
   labels:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- /* kindIs, not `default`: `default` treats an explicit `finalizers: []` as unset. */ -}}
+  {{- with ternary .appMeta.finalizers (list "resources-finalizer.argocd.argoproj.io") (kindIs "slice" .appMeta.finalizers) }}
   finalizers:
-    {{- toYaml (.appMeta.finalizers | default (list "resources-finalizer.argocd.argoproj.io")) | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   project: {{ tpl (toString $project) .Root | quote }}
   destination:
@@ -169,7 +172,8 @@ spec:
     {{- if $syncOptions -}}
       {{- $_ := set $defaultSyncPolicy "syncOptions" $syncOptions -}}
     {{- end -}}
-    {{- toYaml (.appMeta.syncPolicy | default $defaultSyncPolicy) | nindent 4 }}
+    {{- /* An explicit `syncPolicy: {}` means sync by hand, so it must not fall back to the default. */ -}}
+    {{- toYaml (ternary .appMeta.syncPolicy $defaultSyncPolicy (kindIs "map" .appMeta.syncPolicy)) | nindent 4 }}
   {{- with .appMeta.ignoreDifferences }}
   ignoreDifferences:
     {{- toYaml . | nindent 4 }}

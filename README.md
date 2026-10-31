@@ -147,10 +147,11 @@ through. Common fields:
 | `chart` | no | – | Upstream chart (`repo`, `name`/`path`, `version`, `mirror`) → multisource Application; see **Chart source** below |
 | `createNamespace` | no | `false` | Adds `CreateNamespace=true` to syncOptions |
 | `syncOptions` | no | `[]` | Extra sync options |
-| `syncPolicy` | no | (see below) | Full override of the default policy |
+| `syncPolicy` | no | (see below) | Full override of the default policy; `{}` means sync by hand |
 | `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps) |
 | `helm` | no | – | Extra `helm` block fields merged into the auto-built source |
-| `annotations`, `labels`, `finalizers`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through |
+| `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs) |
+| `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through |
 
 > **Caveat — `sources` bypasses the cluster cascade.** The `.Values.cluster`
 > injection + tpl-rendered wrapper values happen only on the auto-built
@@ -255,6 +256,9 @@ syncPolicy:
 
 Permissive — any field accepted in an Argo CD `AppProject` spec passes
 through. Common fields:
+
+An explicit empty list (`sourceRepos: []` and so on) is kept as written, so it allows
+nothing; only a missing field gets the default.
 
 | Field | Default | Notes |
 |---|---|---|

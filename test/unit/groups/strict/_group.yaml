@@ -1,0 +1,4 @@
+# Read only by the tests that set argocdAppLoader.appsRoot: groups.
+description: allows nothing it doesn't list
+sourceRepos: []
+clusterResourceWhitelist: []

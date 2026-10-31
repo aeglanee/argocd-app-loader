@@ -1,0 +1,3 @@
+# An app whose resources must survive its Application being deleted (e.g. CRDs).
+project: unit
+finalizers: []

@@ -25,13 +25,14 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- /* kindIs, not `default`: an explicit `[]` (allow nothing) must not widen to `*`. */}}
   description: {{ .meta.description | default .name | quote }}
   sourceRepos:
-    {{- toYaml (.meta.sourceRepos | default (list "*")) | nindent 4 }}
+    {{- toYaml (ternary .meta.sourceRepos (list "*") (kindIs "slice" .meta.sourceRepos)) | nindent 4 }}
   destinations:
-    {{- toYaml (.meta.destinations | default (list (dict "namespace" "*" "server" "*"))) | nindent 4 }}
+    {{- toYaml (ternary .meta.destinations (list (dict "namespace" "*" "server" "*")) (kindIs "slice" .meta.destinations)) | nindent 4 }}
   clusterResourceWhitelist:
-    {{- toYaml (.meta.clusterResourceWhitelist | default (list (dict "group" "*" "kind" "*"))) | nindent 4 }}
+    {{- toYaml (ternary .meta.clusterResourceWhitelist (list (dict "group" "*" "kind" "*")) (kindIs "slice" .meta.clusterResourceWhitelist)) | nindent 4 }}
   {{- with .meta.clusterResourceBlacklist }}
   clusterResourceBlacklist:
     {{- toYaml . | nindent 4 }}

@@ -67,3 +67,46 @@ tests:
           value:
             - CreateNamespace=true
             - ServerSideApply=true
+
+  # An explicit empty value is kept; only a missing (or null) field gets the default.
+  - it: gives an app the resources finalizer by default, also for a null field
+    set:
+      cluster.apps.null-finalizers: true
+    asserts:
+      - equal:
+          path: metadata.finalizers
+          value:
+            - resources-finalizer.argocd.argoproj.io
+
+  - it: honours an explicit empty finalizer list
+    set:
+      cluster.apps.no-finalizers: true
+    asserts:
+      - notExists:
+          path: metadata.finalizers
+
+  - it: keeps an explicit empty syncPolicy (sync by hand)
+    set:
+      cluster.apps.manual-sync: true
+    asserts:
+      - equal:
+          path: spec.syncPolicy
+          value: {}
+
+  - it: keeps an explicit empty AppProject list instead of allowing everything
+    set:
+      argocdAppLoader.appsRoot: groups
+    asserts:
+      - isKind:
+          of: AppProject
+      - equal:
+          path: spec.sourceRepos
+          value: []
+      - equal:
+          path: spec.clusterResourceWhitelist
+          value: []
+      - equal:
+          path: spec.destinations
+          value:
+            - namespace: "*"
+              server: "*"

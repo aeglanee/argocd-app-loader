@@ -1,0 +1,4 @@
+# `finalizers:` with only a commented-out item is null, not an opt-out.
+project: unit
+finalizers:
+  # - resources-finalizer.argocd.argoproj.io/background
