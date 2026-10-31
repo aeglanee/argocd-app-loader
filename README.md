@@ -67,7 +67,7 @@ type: application
 version: 0.1.0
 dependencies:
   - name: argocd-app-loader
-    version: "0.8.0"
+    version: "0.9.0"
     repository: "oci://ghcr.io/aeglanee/charts"
     # Or, for a local checkout during library development:
     # repository: "file://../../argocd-app-loader"
@@ -470,7 +470,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.2.0"
+      version: "0.9.0"
       repository: "oci://ghcr.io/<owner>/charts"
   ```
 
@@ -485,7 +485,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.2.0"
+      version: "0.9.0"
       repository: "https://<owner>.github.io/argocd-app-loader"
   ```
 
@@ -512,10 +512,10 @@ A loader change that alters output fails `task check`; see [test/README.md](test
 
 ## Status
 
-Pre-1.0. The API is settling. Pin a version in your dependency. The next release (0.9) breaks
-0.8 consumers: `argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit`
-lookup, `cluster:` is no longer injected into the apps, and a root of roots is the new
-`argocd-app-loader.root`, whose chart sits in the fleet repo (`argocdAppLoader.rootPath`).
+Pre-1.0. The API is settling. Pin a version in your dependency. 0.9 breaks 0.8 consumers:
+`argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit` lookup, `cluster:` is
+no longer injected into the apps, and a root of roots is the new `argocd-app-loader.root`, whose
+chart sits in the fleet repo (`argocdAppLoader.rootPath`).
 
 ## License
 
