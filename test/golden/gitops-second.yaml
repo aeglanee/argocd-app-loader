@@ -5,6 +5,8 @@ kind: AppProject
 metadata:
   name: administration
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-31"
 spec:
   description: "Operator-facing control plane — SSO, consoles, git, CI, GitOps, automation"
   sourceRepos:
@@ -23,6 +25,8 @@ kind: AppProject
 metadata:
   name: infrastructure
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-31"
 spec:
   description: "Headless cluster substrate — CNI, DNS, storage, certificates, node tuning"
   sourceRepos:
@@ -41,6 +45,8 @@ kind: AppProject
 metadata:
   name: observability
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-31"
 spec:
   description: "Metrics, logs, dashboards — VictoriaMetrics (+ VictoriaLogs, Vector, Grafana)"
   sourceRepos:
@@ -59,6 +65,8 @@ kind: AppProject
 metadata:
   name: operators
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-31"
 spec:
   description: "Cluster-scoped CRD controllers — CNPG, Redis, tuppr, Trivy"
   sourceRepos:
@@ -77,6 +85,8 @@ kind: AppProject
 metadata:
   name: platform
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-31"
 spec:
   description: "Internal services the cluster consumes — secrets (OpenBao/ESO), TF state, S3, registry (Harbor)"
   sourceRepos:
@@ -95,6 +105,8 @@ kind: AppProject
 metadata:
   name: services
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-31"
 spec:
   description: "User-facing products"
   sourceRepos:

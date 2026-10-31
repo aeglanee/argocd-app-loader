@@ -55,6 +55,8 @@
   {{- end -}}
   {{- $_ := set $seenNames $n $g -}}
 {{- end -}}
+{{- /* The lowest wave of an app that is on (0 at most): AppProjects go one below it. */ -}}
+{{- $firstWave := 0 -}}
 {{- range $path, $_ := .Files.Glob $appGlob }}
   {{- $parts := splitList "/" $path -}}
   {{- $group := index $parts (sub (len $parts) 3) -}}
@@ -62,6 +64,7 @@
   {{- if eq (include "argocd-app-loader.isOn" (dict "Values" $.Values "name" $name)) "true" }}
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
     {{- include "argocd-app-loader.requireYaml" (dict "parsed" $appMeta "file" $path) -}}
+    {{- $firstWave = min $firstWave (int (default 0 $appMeta.wave)) -}}
     {{- /* v2: does the app dir carry its own local chart (Chart.yaml + templates/)? → source B */ -}}
     {{- $hasLocalChart := ne ($.Files.Get (printf "%s/%s/%s/Chart.yaml" $appsRoot $group $name)) "" -}}
     {{- $appDir := printf "%s/%s/%s" $appsRoot $group $name -}}
@@ -149,6 +152,7 @@
 {{ include "argocd-app-loader.appproject" (dict
     "name"   $group
     "meta"   $meta
+    "wave"   (sub $firstWave 1)
     "cluster" $.Values.cluster
     "Values" $.Values
     "Root"   $

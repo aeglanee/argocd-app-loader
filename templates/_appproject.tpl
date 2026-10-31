@@ -7,6 +7,8 @@
   Expected input dict keys:
     name   : project name (= group folder name by convention)
     meta   : parsed _group.yaml content (may carry any AppProject spec field)
+    wave   : sync-wave, below every app that is on: an app whose project doesn't exist yet is
+             never reconciled, so with the Application health check its wave would never finish
     cluster : .Values.cluster from the consumer chart
     Values : full consumer .Values (so tpl works against it)
 */ -}}
@@ -16,10 +18,8 @@ kind: AppProject
 metadata:
   name: {{ .name }}
   namespace: {{ default "argocd" .cluster.argocdNamespace }}
-  {{- with .meta.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- toYaml (merge (deepCopy (default dict .meta.annotations)) (dict "argocd.argoproj.io/sync-wave" (toString .wave))) | nindent 4 }}
   {{- with .meta.labels }}
   labels:
     {{- toYaml . | nindent 4 }}

@@ -291,7 +291,9 @@ syncPolicy:
 
 ### `_group.yaml` (per-group AppProject metadata)
 
-The loader renders the fields below; other `AppProject` spec fields are ignored. A field
+Every AppProject gets a sync-wave one below the first app that is on (at most `-1`): an app whose
+project doesn't exist yet is never reconciled, so with an Application health check its wave would
+never finish. The loader renders the fields below; other `AppProject` spec fields are ignored. A field
 that is present is rendered as written, even when empty: `sourceRepos: []` allows nothing.
 Only a missing or null field (`sourceRepos:` with nothing under it) gets the default.
 

@@ -5,6 +5,8 @@ kind: AppProject
 metadata:
   name: demo
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   description: "Demo group for the argocd-app-loader example consumer."
   sourceRepos:

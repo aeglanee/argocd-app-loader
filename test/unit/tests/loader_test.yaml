@@ -140,3 +140,15 @@ tests:
       - equal:
           path: spec.sourceRepos
           value: https://git.example.com/only-this.git
+
+  - it: puts AppProjects one wave below the first app that is on, and at -1 at most
+    set:
+      argocdAppLoader.appsRoot: groups
+      cluster.apps.early: true
+    documentSelector:
+      path: kind
+      value: AppProject
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-31"
