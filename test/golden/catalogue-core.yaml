@@ -1,0 +1,88 @@
+---
+# Source: core/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: base
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: "The example core package"
+  sourceRepos:
+    - '*'
+  destinations:
+    - namespace: '*'
+      server: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+# Source: core/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hello
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "base"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hello
+  source:
+    repoURL: "https://github.com/example/catalogue.git"
+    targetRevision: "HEAD"
+    path: packages/core/apps/base/hello
+    helm:
+      releaseName: hello
+      valuesObject:
+        {}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10
+
+---
+# Source: core/templates/render.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: needs-hello
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: "base"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: needs-hello
+  source:
+    repoURL: "https://github.com/example/catalogue.git"
+    targetRevision: "HEAD"
+    path: packages/core/apps/base/needs-hello
+    helm:
+      releaseName: needs-hello
+      valuesObject:
+        {}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+      limit: 10

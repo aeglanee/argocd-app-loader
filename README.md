@@ -352,6 +352,69 @@ cluster:
 | `appsRoot` | `apps` | Root directory the loader scans, inside the chart; may be nested (`sub/apps`) |
 | `requireToggle` | `true` | If true, apps must be explicitly enabled in `.Values.cluster.apps` |
 
+### The root of roots (`argocd-app-loader.root`)
+
+For a catalogue split into packages, each a chart that calls `argocd-app-loader.loader`. Call it
+from the catalogue's top chart, the one the hand-applied bootstrap Application renders:
+
+```yaml
+# templates/root.yaml
+{{- include "argocd-app-loader.root" . -}}
+```
+
+It emits the root Application itself (named after the release, so it takes over the bootstrap
+copy), one Application per package the cluster picked, and runs `argocd-app-loader.check` over the
+packages in this repo. The chart must sit at its repo's root. `examples/catalogue` shows the whole
+shape.
+
+```yaml
+# the catalogue's values.yaml: which packages exist, their order, where they live
+argocdAppLoader:
+  packages:
+    core:
+      wave: 0             # packages/core in this repo
+    media:
+      wave: 20            # another repo, resolved through cluster.mirrors (mirror: false opts out)
+      repoURL: https://github.com/example/media-package.git   # path defaults to "."
+      provides:           # its apps' names or capabilities, for the check here
+        - jellyfin
+---
+# the cluster's values
+cluster:
+  remoteGitRepo: https://github.com/example/catalogue.git    # this repo
+  instanceRemoteRepo: https://github.com/example/cluster.git
+  instanceValuesFiles:                                       # later files win
+    - cluster-values.yaml
+  packages:
+    core: true
+    media:
+      version: v1.2.0     # a map counts as picked; version (a quoted git ref) is its only key
+  instancePackages:
+    site:                                                    # in the cluster's repo
+      path: packages/site
+      wave: 30
+```
+
+| Package Application gets | Value |
+|---|---|
+| sync-wave | its `wave`: a package waits until every lower wave is healthy (with an Application health check in `argocd-cm`) |
+| source | this repo at `packages/<name>`, another repo at `path`, or the cluster's repo for instance packages; at `version`, else the repo's revision (`cluster.targetRevision`, another repo's `HEAD`, `cluster.instanceRevision`) |
+| values | `$catalogue/values.yaml` (this repo's defaults, at the package's revision if it lives here), then each instance values file |
+| `argocdAppLoader.source` | where its own files are, for its apps' local charts |
+
+`cluster.useLocalGit` switches this repo and the cluster's repo between their `remote…` and
+`local…` URLs. The check reads the packages whose files are here: in this repo and at this
+revision. A package elsewhere, pinned to another version, or in the cluster's repo isn't read; it
+counts through its `provides:` list, and its apps' own `requires:` aren't checked.
+
+The render fails on:
+
+- a pick the catalogue doesn't have, a pick that is neither a bool nor a map, or a map key other
+  than `version`;
+- picking nothing (the root would prune every app), or an empty `instanceValuesFiles`;
+- a missing `wave`, or a git ref that isn't a string;
+- two Applications with one name: the root, a package, an app in a package here.
+
 ### Checks across roots (`argocd-app-loader.check`)
 
 A separate include that renders nothing and fails on the first problem. Call it from a chart
@@ -372,7 +435,9 @@ at 0. An app is on when its root is on and its toggle is. The render fails when:
 - a required app comes later, comparing (root wave, app wave). The same wave passes: `requires:`
   says an app needs the other on, not healthy first; a lower wave says that;
 - two roots hold the same app name (they share `cluster.apps`) or the same group (one AppProject);
-- `requires:`/`provides:` isn't a list, or names nothing that exists.
+- `requires:`/`provides:` isn't a list, or names nothing that exists. With `"outside"`, a list of
+  packages that are on but not readable here (`{name, wave, provides}`), their `provides:` count
+  as met at the start of their wave.
 
 ```yaml
 # apps/observability/grafana/app.yaml

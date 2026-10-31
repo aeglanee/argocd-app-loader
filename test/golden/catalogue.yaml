@@ -1,0 +1,190 @@
+---
+# Source: catalogue/templates/root.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false   # a render that drops it can't delete it
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: "https://github.com/example/catalogue.git"
+      targetRevision: "HEAD"
+      path: "."
+      helm:
+        valueFiles:
+          - $values/cluster-values.yaml
+    - repoURL: "https://github.com/example/cluster.git"
+      targetRevision: "HEAD"
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # As for apps: a failed sync isn't retried for the same commit otherwise.
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=true
+
+---
+# Source: catalogue/templates/root.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: core
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: "https://github.com/example/catalogue.git"
+      targetRevision: "HEAD"
+      path: "packages/core"
+      helm:
+        valueFiles:
+          - $catalogue/values.yaml
+          - $values/cluster-values.yaml
+        valuesObject:
+          argocdAppLoader:
+            source:                     # where this package's files are
+              repoURL: "https://github.com/example/catalogue.git"
+              targetRevision: "HEAD"
+              path: "packages/core"
+    - repoURL: "https://github.com/example/catalogue.git"
+      targetRevision: "HEAD"
+      ref: catalogue
+    - repoURL: "https://github.com/example/cluster.git"
+      targetRevision: "HEAD"
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # As for apps: a failed sync isn't retried for the same commit otherwise.
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - ServerSideApply=true
+
+---
+# Source: catalogue/templates/root.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: media
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: "https://github.com/example/media-package.git"
+      targetRevision: "v1.2.0"
+      path: "."
+      helm:
+        valueFiles:
+          - $catalogue/values.yaml
+          - $values/cluster-values.yaml
+        valuesObject:
+          argocdAppLoader:
+            source:                     # where this package's files are
+              repoURL: "https://github.com/example/media-package.git"
+              targetRevision: "v1.2.0"
+              path: "."
+    - repoURL: "https://github.com/example/catalogue.git"
+      targetRevision: "HEAD"
+      ref: catalogue
+    - repoURL: "https://github.com/example/cluster.git"
+      targetRevision: "HEAD"
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # As for apps: a failed sync isn't retried for the same commit otherwise.
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - ServerSideApply=true
+
+---
+# Source: catalogue/templates/root.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: site
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: "https://github.com/example/cluster.git"
+      targetRevision: "HEAD"
+      path: "packages/site"
+      helm:
+        valueFiles:
+          - $catalogue/values.yaml
+          - $values/cluster-values.yaml
+        valuesObject:
+          argocdAppLoader:
+            source:                     # where this package's files are
+              repoURL: "https://github.com/example/cluster.git"
+              targetRevision: "HEAD"
+              path: "packages/site"
+    - repoURL: "https://github.com/example/catalogue.git"
+      targetRevision: "HEAD"
+      ref: catalogue
+    - repoURL: "https://github.com/example/cluster.git"
+      targetRevision: "HEAD"
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # As for apps: a failed sync isn't retried for the same commit otherwise.
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - ServerSideApply=true

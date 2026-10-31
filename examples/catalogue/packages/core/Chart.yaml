@@ -1,0 +1,9 @@
+apiVersion: v2
+name: core
+description: One package. The root emits it as one Application; it renders its apps with the loader.
+type: application
+version: 0.0.1
+dependencies:
+  - name: argocd-app-loader
+    version: ">=0.1.0"
+    repository: "file://../../../../"

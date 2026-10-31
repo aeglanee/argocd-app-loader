@@ -13,6 +13,9 @@
             (dict "name" "core" "path" "packages/core/apps" "wave" 0 "on" true)
             (dict "name" "platform" "path" "packages/platform/apps" "wave" 10 "on" true))) -}}
 
+  "outside" lists packages that are on but whose files aren't here (another repo or revision):
+  {name, wave, provides}. Their provides: count as met, by an app at the start of their wave.
+
   Without "roots" it checks the chart's own argocdAppLoader.appsRoot as one root. A root without
   "on" is on, without "wave" at 0. An app is on when its root is on and its toggle is, by the same
   rule as the loader (argocdAppLoader.requireToggle). The same wave counts as "no later":
@@ -21,7 +24,8 @@
 {{- define "argocd-app-loader.check" -}}
 {{- $root := .Root -}}
 {{- $cfg := default dict $root.Values.argocdAppLoader -}}
-{{- $roots := .roots | default (list (dict "name" "" "path" (default "apps" $cfg.appsRoot) "wave" 0 "on" true)) -}}
+{{- /* hasKey, not default: an empty list (every package elsewhere) must stay empty. */ -}}
+{{- $roots := ternary .roots (list (dict "name" "" "path" (default "apps" $cfg.appsRoot) "wave" 0 "on" true)) (hasKey . "roots") -}}
 {{- $apps := dict -}}
 {{- $groups := dict -}}
 {{- range $r := $roots -}}
@@ -68,9 +72,17 @@
   {{- end -}}
 {{- end -}}
 
+{{- range $o := default list .outside -}}
+  {{- range $n := $o.provides -}}
+    {{- $key := printf "%s from package %s" (toString $n) $o.name -}}
+    {{- $_ := set $apps $key (dict "dir" "" "on" true "requires" list "provides" list "order" (list (int $o.wave) -1000000) "where" (printf "wave %v" $o.wave) "offRoot" "" "virtual" true) -}}
+    {{- $_ := set $providers (toString $n) (append (get $providers (toString $n) | default list) $key) -}}
+  {{- end -}}
+{{- end -}}
+
 {{- range $name := keys $apps | sortAlpha -}}
   {{- $a := get $apps $name -}}
-  {{- if $a.on -}}
+  {{- if and $a.on (not $a.virtual) -}}
     {{- range $req := $a.requires -}}
       {{- $req = toString $req -}}
       {{- $candidates := get $providers $req | default list -}}

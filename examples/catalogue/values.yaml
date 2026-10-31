@@ -1,0 +1,28 @@
+# The catalogue: which packages exist, their order, where they live.
+argocdAppLoader:
+  packages:
+    core:
+      wave: 0                     # packages/core in this repo
+    media:
+      wave: 20                    # a package from another repo
+      repoURL: https://github.com/example/media-package.git
+      provides:                   # what its apps provide, for the check here
+        - jellyfin
+
+# What the instance (the cluster's own repo) normally sets; defaults here for the example.
+cluster:
+  remoteGitRepo: https://github.com/example/catalogue.git
+  instanceRemoteRepo: https://github.com/example/cluster.git
+  instanceValuesFiles:
+    - cluster-values.yaml
+  packages:
+    core: true
+    media:
+      version: v1.2.0             # picked, pinned to a tag
+  instancePackages:
+    site:                         # a package in the cluster's own repo
+      path: packages/site
+      wave: 30
+  apps:
+    hello: true
+    needs-hello: true

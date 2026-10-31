@@ -1,0 +1,354 @@
+suite: root
+templates:
+  - root.yaml
+release:
+  name: cluster
+set:
+  rootTest: true
+  cluster:
+    remoteGitRepo: https://git.example.com/catalogue.git
+    localGitRepo: http://forgejo.local/catalogue
+    instanceRemoteRepo: https://git.example.com/instance.git
+    instanceLocalRepo: http://forgejo.local/instance
+    instanceValuesFiles:
+      - common.yaml
+      - this.yaml
+    apps:
+      base: true
+      needs-base: true
+      user: true
+      typo: true
+    packages:
+      a: true
+      b: true
+  argocdAppLoader:
+    packages:
+      a:
+        wave: 0
+        path: roots/a
+      b:
+        wave: 10
+        path: roots/b
+tests:
+  - it: emits itself, named after the release, with every instance values file
+    documentSelector:
+      path: metadata.name
+      value: cluster
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: Prune=false
+      - equal:
+          path: spec.sources[0]
+          value:
+            repoURL: https://git.example.com/catalogue.git
+            targetRevision: HEAD
+            path: .
+            helm:
+              valueFiles:
+                - $values/common.yaml
+                - $values/this.yaml
+      - equal:
+          path: spec.sources[1]
+          value:
+            repoURL: https://git.example.com/instance.git
+            targetRevision: HEAD
+            ref: values
+
+  - it: emits one Application per picked package, reading the catalogue's defaults by ref
+    documentSelector:
+      path: metadata.name
+      value: b
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "10"
+      - equal:
+          path: spec.sources
+          value:
+            - repoURL: https://git.example.com/catalogue.git
+              targetRevision: HEAD
+              path: roots/b
+              helm:
+                valueFiles:
+                  - $catalogue/values.yaml
+                  - $values/common.yaml
+                  - $values/this.yaml
+                valuesObject:
+                  argocdAppLoader:
+                    source:
+                      repoURL: https://git.example.com/catalogue.git
+                      targetRevision: HEAD
+                      path: roots/b
+            - repoURL: https://git.example.com/catalogue.git
+              targetRevision: HEAD
+              ref: catalogue
+            - repoURL: https://git.example.com/instance.git
+              targetRevision: HEAD
+              ref: values
+
+  - it: leaves out a package that isn't picked
+    set:
+      cluster.packages.b: false
+      cluster.apps.user: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: pins a package and its defaults to its version, quoted
+    set:
+      cluster.packages.a:
+        version: "2026.10"
+      argocdAppLoader.packages.a.provides:   # pinned, so it counts as elsewhere
+        - csi
+        - needs-base
+    documentSelector:
+      path: metadata.name
+      value: a
+    asserts:
+      - equal:
+          path: spec.sources[0].targetRevision
+          value: "2026.10"
+      - equal:
+          path: spec.sources[0].helm.valuesObject.argocdAppLoader.source.targetRevision
+          value: "2026.10"
+      - equal:
+          path: spec.sources[1].targetRevision
+          value: "2026.10"
+
+  - it: counts an empty map as picked
+    set:
+      cluster.packages.a: {}
+    documentSelector:
+      path: metadata.name
+      value: a
+    asserts:
+      - equal:
+          path: spec.sources[0].targetRevision
+          value: HEAD
+
+  - it: takes a package from another repo, mirrored, at its own HEAD
+    set:
+      argocdAppLoader.packages.ext:
+        wave: 20
+        repoURL: https://github.com/someone/ext.git
+      cluster.packages.ext: true
+      cluster.targetRevision: v1
+      cluster.mirrors:
+        via:
+          forgejo:
+            enabled: true
+            base: http://forgejo.local/mirror-bot
+        table:
+          github.com/someone/ext:
+            via: forgejo
+            repo: ext
+    documentSelector:
+      path: metadata.name
+      value: ext
+    asserts:
+      - equal:
+          path: spec.sources[0].repoURL
+          value: http://forgejo.local/mirror-bot/ext
+      - equal:
+          path: spec.sources[0].path
+          value: .
+      - equal:
+          path: spec.sources[0].targetRevision
+          value: HEAD
+      - equal:
+          path: spec.sources[1]
+          value:
+            repoURL: https://git.example.com/catalogue.git
+            targetRevision: v1
+            ref: catalogue
+
+  - it: emits the instance's own packages from the instance repo
+    set:
+      cluster.instancePackages.site:
+        path: packages/site
+        wave: 40
+    documentSelector:
+      path: metadata.name
+      value: site
+    asserts:
+      - equal:
+          path: spec.sources[0].repoURL
+          value: https://git.example.com/instance.git
+      - equal:
+          path: spec.sources[0].path
+          value: packages/site
+
+  - it: switches both repos to the local git with useLocalGit
+    set:
+      cluster.useLocalGit: true
+    documentSelector:
+      path: metadata.name
+      value: a
+    asserts:
+      - equal:
+          path: spec.sources[0].repoURL
+          value: http://forgejo.local/catalogue
+      - equal:
+          path: spec.sources[2].repoURL
+          value: http://forgejo.local/instance
+
+  - it: fails on a pick the catalogue doesn't have
+    set:
+      cluster.packages.c: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.c: no such package; the catalogue has a, b"
+
+  - it: fails on a pick that is neither a bool nor a map
+    set:
+      cluster.packages.a: "yes"
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.a must be true, false or \\{version: <git ref>\\}, got yes \\(a string\\)"
+
+  - it: fails when nothing is picked
+    set:
+      cluster.packages:
+        a: false
+        b: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "picks no package"
+
+  - it: fails on an instance package named like the root
+    set:
+      cluster.instancePackages.cluster:
+        path: x
+        wave: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "the root and an instance package would both be Application/cluster"
+
+  - it: runs the check over the packages in this repo
+    set:
+      cluster.apps.needs-base: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs-base is off, but user requires it"
+
+  - it: checks requirements against what a package elsewhere declares it provides
+    set:
+      argocdAppLoader.packages.typos:
+        wave: 0
+        path: roots/typo
+      argocdAppLoader.packages.ext:
+        wave: 20
+        repoURL: https://github.com/someone/ext.git
+        provides:
+          - nothing-like-this
+      cluster.packages.typos: true
+      cluster.packages.ext: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "typo \\(typos, wave 0\\) requires nothing-like-this from package ext \\(wave 20\\), which comes later"
+
+  - it: still catches a typo while a package elsewhere is on
+    set:
+      argocdAppLoader.packages.typos:
+        wave: 0
+        path: roots/typo
+      argocdAppLoader.packages.ext:
+        wave: 20
+        repoURL: https://github.com/someone/ext.git
+      cluster.packages.typos: true
+      cluster.packages.ext: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "typo requires nothing-like-this, but no app is named so or provides it"
+
+  - it: treats a package pinned to another revision as elsewhere, through its provides
+    set:
+      cluster.packages.a:
+        version: v1
+      cluster.apps.base: false
+      argocdAppLoader.packages.a.provides:
+        - csi
+        - needs-base
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: fails on a catalogue package named like the root
+    set:
+      argocdAppLoader.packages.cluster.wave: 5
+      cluster.packages.cluster: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "the root and a catalogue package would both be Application/cluster"
+
+  - it: fails on an app named like the root
+    set:
+      argocdAppLoader.packages.clash:
+        wave: 0
+        path: roots/clash
+      cluster.packages.clash: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "the root and the app roots/clash/apps/gc/cluster would both be Application/cluster"
+
+  - it: fails on an instance package named like an app, at any package path
+    set:
+      cluster.instancePackages.base:
+        path: x
+        wave: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "an instance package and the app roots/a/apps/ga/base would both be Application/base"
+
+  - it: fails on an empty list of instance values files
+    set:
+      cluster.instanceValuesFiles: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.instanceValuesFiles must list at least one file"
+
+  - it: fails on an unquoted version
+    set:
+      cluster.packages.a:
+        version: 1.10
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.a.version must be a string, so quote it \\(got 1.1, which YAML reads as a float64\\)"
+
+  - it: fails on a typo inside a pick
+    set:
+      cluster.packages.a:
+        verison: v1
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.a.verison: a pick only takes version"
+
+  - it: cleans a package path
+    set:
+      argocdAppLoader.packages.b.path: ./roots/b/
+    documentSelector:
+      path: metadata.name
+      value: b
+    asserts:
+      - equal:
+          path: spec.sources[0].path
+          value: roots/b
+
+  - it: names the key it is missing, local or remote
+    set:
+      cluster.useLocalGit: true
+      cluster.localGitRepo: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.localGitRepo is required"
+
+  - it: doesn't check the chart's apps/ folder when every package is elsewhere
+    set:
+      argocdAppLoader.packages:
+        ext:
+          wave: 0
+          repoURL: https://github.com/someone/ext.git
+      cluster.packages:
+        ext: true
+    asserts:
+      - notFailedTemplate: {}
