@@ -3,5 +3,3 @@
 wave: 9
 namespace: patched
 createNamespace: true
-requires:
-  - hello

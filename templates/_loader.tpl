@@ -17,7 +17,8 @@
     .Values.cluster.apps.<name>           Boolean on/off toggle for each app
     .Values.cluster.overrides.<name>      Merged over the app's rendered values
     .Values.argocdAppLoader.source        Where this chart's files live (repoURL, targetRevision, path)
-    .Values.argocdAppLoader.takenNames    Application names apps can't use (set by the root of roots)
+    .Values.argocdAppLoader.package       This package's name, rootName the root's (set by the root of roots)
+    .Values.argocdAppLoader.dependencies  The dependency list, checked here (see _dependencies.tpl)
 
   Customizable via .Values.argocdAppLoader:
     appsRoot       : root path to scan (default "apps")
@@ -55,9 +56,9 @@
     {{- fail (printf "argocd-app-loader: duplicate app name %q in groups %q and %q — app folder names must be unique across groups" $n (index $seenNames $n) $g) -}}
   {{- end -}}
   {{- $_ := set $seenNames $n $g -}}
-  {{- /* Names the root of roots says it and the packages take: an app with one would replace it. */ -}}
-  {{- if has $n (default list $cfg.takenNames) -}}
-    {{- fail (printf "argocd-app-loader: app %s/%s has the name of the root or a package; both would be Application/%s, so rename the app" $g $n $n) -}}
+  {{- /* The root of roots and its package Applications (pkg-<name>) share the namespace. */ -}}
+  {{- if or (hasPrefix "pkg-" $n) (and $cfg.rootName (eq $n (toString $cfg.rootName))) -}}
+    {{- fail (printf "argocd-app-loader: app %s/%s would clash with the root of roots or a package (pkg-*); rename the app" $g $n) -}}
   {{- end -}}
 {{- end -}}
 {{- /* The lowest wave of an app that is on (0 at most): AppProjects go one below it. */ -}}
@@ -70,6 +71,11 @@
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
     {{- include "argocd-app-loader.requireYaml" (dict "parsed" $appMeta "file" $path) -}}
     {{- $firstWave = min $firstWave (int (default 0 $appMeta.wave)) -}}
+    {{- range $old := list "requires" "provides" -}}
+      {{- if hasKey $appMeta $old -}}
+        {{- fail (printf "argocd-app-loader: %s: %s: moved to argocdAppLoader.dependencies in 0.9 (see README), so it would do nothing here" $path $old) -}}
+      {{- end -}}
+    {{- end -}}
     {{- /* v2: does the app dir carry its own local chart (Chart.yaml + templates/)? → source B */ -}}
     {{- $hasLocalChart := ne ($.Files.Get (printf "%s/%s/%s/Chart.yaml" $appsRoot $group $name)) "" -}}
     {{- $appDir := printf "%s/%s/%s" $appsRoot $group $name -}}
@@ -163,6 +169,7 @@
     "Root"   $
 ) }}
 {{- end }}
+{{- include "argocd-app-loader.dependencies" (dict "Root" $) }}
 {{- end -}}
 
 {{- /*

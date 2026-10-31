@@ -1,1 +1,0 @@
-{{- with .Values.check }}{{ include "argocd-app-loader.check" (dict "Root" $ "roots" .roots) }}{{ end -}}

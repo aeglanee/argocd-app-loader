@@ -282,12 +282,24 @@ tests:
       - failedTemplate:
           errorPattern: "its values \\(values file or cluster.overrides\\) can't have a chart: block"
 
-  - it: fails on an app named like the root or a package
+  - it: fails on an app named like the root
     set:
       cluster.apps.plain: true
-      argocdAppLoader.takenNames:
-        - cluster
-        - plain
+      argocdAppLoader.rootName: plain
     asserts:
       - failedTemplate:
-          errorPattern: "app unit/plain has the name of the root or a package; both would be Application/plain"
+          errorPattern: "app unit/plain would clash with the root of roots or a package"
+
+  - it: fails on an app named like a package Application
+    set:
+      argocdAppLoader.appsRoot: nested2/apps
+    asserts:
+      - failedTemplate:
+          errorPattern: "app g/pkg-thing would clash with the root of roots or a package \\(pkg-\\*\\)"
+
+  - it: fails on requires in app.yaml, which moved to the dependency list
+    set:
+      cluster.apps.old-requires: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "apps/unit/old-requires/app.yaml: requires: moved to argocdAppLoader.dependencies in 0.9"

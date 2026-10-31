@@ -1,4 +1,2 @@
 namespace: needs-hello
 wave: 1
-requires:
-  - greeting   # met by hello; the root fails if hello is switched off

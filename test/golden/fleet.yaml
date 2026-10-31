@@ -48,7 +48,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: core
+  name: pkg-core
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
@@ -70,11 +70,8 @@ spec:
               repoURL: "https://github.com/example/catalogue.git"
               targetRevision: "HEAD"
               path: "packages/core"
-            takenNames:                 # the root's and the packages': no app may take one
-              - cluster
-              - core
-              - media
-              - site
+            package: "core"        # for the dependency list
+            rootName: "cluster"   # no app may take it
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
@@ -103,7 +100,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: media
+  name: pkg-media
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "20"
@@ -125,11 +122,8 @@ spec:
               repoURL: "https://github.com/example/media-package.git"
               targetRevision: "v1.2.0"
               path: "."
-            takenNames:                 # the root's and the packages': no app may take one
-              - cluster
-              - core
-              - media
-              - site
+            package: "media"        # for the dependency list
+            rootName: "cluster"   # no app may take it
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
@@ -158,7 +152,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: site
+  name: pkg-site
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "30"
@@ -180,11 +174,8 @@ spec:
               repoURL: "https://github.com/example/fleet.git"
               targetRevision: "HEAD"
               path: "packages/site"
-            takenNames:                 # the root's and the packages': no app may take one
-              - cluster
-              - core
-              - media
-              - site
+            package: "site"        # for the dependency list
+            rootName: "cluster"   # no app may take it
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue

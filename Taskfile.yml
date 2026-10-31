@@ -29,7 +29,8 @@ tasks:
         helm template core examples/catalogue/packages/core --namespace argocd -f examples/catalogue/values.yaml
         -f examples/fleet/clusters/demo/values.yaml
         --set argocdAppLoader.source.repoURL=https://github.com/example/catalogue.git
-        --set argocdAppLoader.source.path=packages/core > test/golden/catalogue-core.yaml
+        --set argocdAppLoader.source.path=packages/core --set argocdAppLoader.package=core
+        > test/golden/catalogue-core.yaml
       - >-
         helm template cluster test/fixtures/gitops --namespace argocd
         -f test/fixtures/gitops/cluster-values.yaml > test/golden/gitops.yaml

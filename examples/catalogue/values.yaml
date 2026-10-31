@@ -7,6 +7,17 @@ argocdAppLoader:
     media:
       wave: 20                    # a package from another repo
       repoURL: https://github.com/example/media-package.git
+  # Dependencies, checked in each package's render (opt-in). Switching hello off while needs-hello
+  # is on fails core's render, so nothing is pruned.
+  dependencies:
+    hello:
+      package: core
+      provides:
+        - greeting
+    needs-hello:
+      package: core
+      requires:
+        - greeting
 
 cluster:
   domain: example.com             # a default; a cluster's file sets its own

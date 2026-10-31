@@ -1,3 +1,1 @@
 {{- include "argocd-app-loader.loader" . -}}
-{{- /* Renders nothing; fails if an app that is on requires one that is off or comes later. */ -}}
-{{- include "argocd-app-loader.check" (dict "Root" $) -}}

@@ -53,7 +53,7 @@ tests:
   - it: emits one Application per picked package, from the catalogue repo
     documentSelector:
       path: metadata.name
-      value: b
+      value: pkg-b
     asserts:
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
@@ -75,10 +75,8 @@ tests:
                       repoURL: https://git.example.com/catalogue.git
                       targetRevision: HEAD
                       path: packages/b
-                    takenNames:
-                      - a
-                      - b
-                      - cluster
+                    package: b
+                    rootName: cluster
             - repoURL: https://git.example.com/catalogue.git
               targetRevision: HEAD
               ref: catalogue
@@ -99,7 +97,7 @@ tests:
         version: "2026.10"
     documentSelector:
       path: metadata.name
-      value: a
+      value: pkg-a
     asserts:
       - equal:
           path: spec.sources[0].targetRevision
@@ -116,7 +114,7 @@ tests:
       cluster.packages.a: {}
     documentSelector:
       path: metadata.name
-      value: a
+      value: pkg-a
     asserts:
       - equal:
           path: spec.sources[0].targetRevision
@@ -140,7 +138,7 @@ tests:
             repo: ext
     documentSelector:
       path: metadata.name
-      value: ext
+      value: pkg-ext
     asserts:
       - equal:
           path: spec.sources[0].repoURL
@@ -165,7 +163,7 @@ tests:
         wave: 40
     documentSelector:
       path: metadata.name
-      value: site
+      value: pkg-site
     asserts:
       - equal:
           path: spec.sources[0].repoURL
@@ -173,9 +171,9 @@ tests:
       - equal:
           path: spec.sources[0].path
           value: packages/site
-      - contains:
-          path: spec.sources[0].helm.valuesObject.argocdAppLoader.takenNames
-          content: site
+      - equal:
+          path: spec.sources[0].helm.valuesObject.argocdAppLoader.package
+          value: site
 
   - it: switches both repos to the local git with useLocalGit
     set:
@@ -192,14 +190,14 @@ tests:
           value: http://forgejo.local/catalogue
         documentSelector:
           path: metadata.name
-          value: a
+          value: pkg-a
 
   - it: cleans a package path
     set:
       argocdAppLoader.packages.b.path: ./pkgs/b/
     documentSelector:
       path: metadata.name
-      value: b
+      value: pkg-b
     asserts:
       - equal:
           path: spec.sources[0].path
@@ -251,21 +249,12 @@ tests:
       - failedTemplate:
           errorPattern: "cluster.instanceValuesFiles must list at least one file"
 
-  - it: fails on a catalogue package named like the root
-    set:
-      argocdAppLoader.packages.cluster.wave: 5
+  - it: fails when the root is named like a package Application
+    release:
+      name: pkg-root
     asserts:
       - failedTemplate:
-          errorPattern: "the root and a catalogue package would both be Application/cluster"
-
-  - it: fails on an instance package named like the root
-    set:
-      cluster.instancePackages.cluster:
-        path: x
-        wave: 1
-    asserts:
-      - failedTemplate:
-          errorPattern: "the root and an instance package would both be Application/cluster"
+          errorPattern: "the root is named pkg-root, but pkg-\\* names are the packages'"
 
   - it: fails without rootPath
     set:
@@ -281,7 +270,7 @@ tests:
         wave: 1
     asserts:
       - failedTemplate:
-          errorPattern: "a catalogue package and an instance package would both be Application/a"
+          errorPattern: "a catalogue package and an instance package would both be Application/pkg-a"
 
   - it: names the key it is missing, local or remote
     set:
@@ -290,3 +279,45 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "cluster.localGitRepo is required"
+
+  - it: refuses to switch a package off while an app that is on in another needs one of its apps
+    set:
+      argocdAppLoader.dependencies:
+        x:
+          package: b
+          requires:
+            - y
+        y:
+          package: a
+      cluster.apps:
+        x: true
+        y: true
+      cluster.packages.a: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "x requires y, but nothing that is on provides it \\(off: y \\(package a isn't picked\\)\\)"
+
+  - it: checks dependencies without needing the packages' files
+    set:
+      argocdAppLoader.dependencies:
+        x:
+          package: b
+          requires:
+            - y
+        y:
+          package: a
+      cluster.apps:
+        x: true
+        y: true
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: requires package in the root's check too, or an entry would count as always picked
+    set:
+      argocdAppLoader.dependencies:
+        y:
+          requires: []
+      cluster.apps.y: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencies.y needs package:"

@@ -1,0 +1,190 @@
+suite: dependencies
+templates:
+  - render.yaml
+set:
+  argocdAppLoader:
+    package: unit
+    packages:
+      base:
+        wave: 0
+      unit:
+        wave: 10
+      late:
+        wave: 20
+    dependencies:
+      plain:
+        package: unit
+        requires:
+          - storage
+      store:
+        package: base
+        provides:
+          - storage
+      sync-options:
+        package: unit
+        provides:
+          - cache
+      consumer:
+        package: late
+        requires:
+          - cache
+  cluster:
+    packages:
+      base: true
+      unit: true
+      late: true
+    apps:
+      plain: true
+      store: true
+      sync-options: true
+      consumer: true
+tests:
+  - it: renders when every requirement is on and comes no later
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: fails when a requirement is off
+    set:
+      cluster.apps.store: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "plain requires storage, but nothing that is on provides it \\(off: store \\(base\\)\\)"
+
+  - it: counts an app in a package that isn't picked as off
+    set:
+      cluster.packages.base: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "plain requires storage, but nothing that is on provides it"
+
+  - it: refuses to switch an app off while an app on elsewhere needs it, so nothing is pruned
+    set:
+      cluster.apps.sync-options: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "sync-options is off, but consumer \\(late\\) requires cache, which only it provides — switch it off first"
+
+  - it: lets an app go once its dependents are off, here by their package
+    set:
+      cluster.apps.sync-options: false
+      cluster.packages.late: false
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: lets an app go while another app that is on provides the same
+    set:
+      cluster.apps.sync-options: false
+      cluster.apps.wrapped: true
+      argocdAppLoader.dependencies.wrapped:
+        package: unit
+        provides:
+          - cache
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: fails when a requirement's package comes later
+    set:
+      argocdAppLoader.dependencies.store.package: late
+    asserts:
+      - failedTemplate:
+          errorPattern: "plain requires storage, which store \\(late\\) provides only later"
+
+  - it: compares app waves inside one package
+    set:
+      cluster.apps.waved: true
+      argocdAppLoader.dependencies.waved:
+        package: unit
+        provides:
+          - storage
+      cluster.apps.store: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "plain requires storage, which waved provides only later \\(package wave 10, app wave 5; plain is at 10, 0\\)"
+
+  - it: fails on a requirement no listed app is named or provides
+    set:
+      argocdAppLoader.dependencies.plain.requires:
+        - storag
+    asserts:
+      - failedTemplate:
+          errorPattern: "plain requires storag, but no listed app is named so or provides it"
+
+  - it: fails on an unknown package
+    set:
+      argocdAppLoader.dependencies.store.package: nope
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencies.store.package: no package \"nope\""
+
+  - it: fails on a listed app its package doesn't have
+    set:
+      argocdAppLoader.dependencies.ghost:
+        package: unit
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencies.ghost is listed under package unit, which has no app ghost"
+
+  - it: fails on an app of this package listed under another
+    set:
+      argocdAppLoader.dependencies.plain.package: base
+    asserts:
+      - failedTemplate:
+          errorPattern: "app plain is in package unit, but dependencies list it under package base"
+
+  - it: fails on an entry without its package
+    set:
+      argocdAppLoader.dependencies.store.package: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencies.store needs package:"
+
+  - it: checks a single chart without packages
+    set:
+      argocdAppLoader.package: null
+      argocdAppLoader.dependencies:
+        plain:
+          package: null
+          requires:
+            - sync-options
+        sync-options:
+          package: null
+          provides: []
+        store: null
+        consumer: null
+      cluster.apps.sync-options: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "plain requires sync-options, but nothing that is on provides it"
+
+  - it: refuses an app switched off while something on requires it by name
+    set:
+      argocdAppLoader.dependencies.consumer.requires:
+        - sync-options
+      cluster.apps.sync-options: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "sync-options is off, but consumer \\(late\\) requires it — switch it off first"
+
+  - it: still fails the pruning package when a provider's entry is removed but still required
+    set:
+      argocdAppLoader.dependencies.sync-options: null
+      cluster.apps.sync-options: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "consumer \\(late\\) requires cache, but no listed app is named so or provides it"
+
+  - it: names a nulled entry when something still requires it
+    set:
+      argocdAppLoader.dependencies.consumer.requires:
+        - sync-options
+      argocdAppLoader.dependencies.sync-options: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencies.sync-options is null, which removes it"
+
+  - it: fails on an entry that isn't a mapping
+    set:
+      argocdAppLoader.dependencies.store: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "dependencies.store must be a mapping"

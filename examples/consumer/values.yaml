@@ -43,3 +43,10 @@ argocdAppLoader:
     repoURL: "git@github.com:example/cluster.git"
     targetRevision: HEAD
     path: examples/consumer
+  # Dependencies, checked in the render (opt-in: unlisted apps aren't checked). Switching hello off
+  # while patched is on fails the render instead of pruning hello.
+  dependencies:
+    patched:
+      requires:
+        - hello
+    hello: {}

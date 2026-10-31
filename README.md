@@ -143,7 +143,6 @@ through. Common fields:
 | `syncPolicy` | no | (see below) | Replaces the default policy as written, so `createNamespace` and `syncOptions` no longer apply (put `syncOptions` inside it); `{}` means sync by hand |
 | `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps) |
 | `helm` | no | – | Extra `helm` block fields for the auto-built source; they win over the pinned `kubeVersion`/`apiVersions` |
-| `requires`, `provides` | no | – | Lists for `argocd-app-loader.check`; see **Checks across roots** below |
 | `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs). Missing or null gets the default |
 | `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through (`revisionHistoryLimit: 0` included) |
 
@@ -403,7 +402,8 @@ cluster:
 | sync-wave (packages) | its `wave`: a package waits until every lower wave is healthy (with an Application health check in `argocd-cm`) |
 | source | the root: the fleet repo at `rootPath`; a package: the catalogue at `packages/<name>`, another repo at `path`, or the fleet repo for instance packages; at `version`, else that repo's revision (`cluster.targetRevision`, another repo's `HEAD`, `cluster.instanceRevision`) |
 | `argocdAppLoader.source` (packages) | where its own files are, for its apps' local charts |
-| `argocdAppLoader.takenNames` (packages) | the root's and every package's name: an app with one fails its package's render, since it would replace that Application |
+| name (packages) | `pkg-<name>`, so no package can share a name with an app; the loader fails an app named `pkg-…` or like the root |
+| `argocdAppLoader.package`, `rootName` (packages) | its own name, for the dependency list, and the root's |
 
 `cluster.useLocalGit` switches the catalogue and the fleet repo between their `remote…` and
 `local…` URLs. The render fails on:
@@ -412,40 +412,53 @@ cluster:
   than `version`;
 - picking nothing (the root would prune every app), or an empty `instanceValuesFiles`;
 - a missing `wave`, or a git ref that isn't a string;
-- the root, a catalogue package and an instance package sharing a name.
+- a catalogue and an instance package sharing a name, or a root named `pkg-…`.
 
-The root can't read the packages' files, so it doesn't check `requires:` across packages. That
-needs `argocd-app-loader.check` over a checkout of every package's repo, e.g. in CI (not built
-yet).
+Dependencies are checked inside each package's own render (`argocdAppLoader.dependencies`): a
+package syncs on its own, so only its own render can stop it from pruning an app others need.
 
-### Checks across roots (`argocd-app-loader.check`)
+### Dependencies (`argocdAppLoader.dependencies`)
 
-A separate include that renders nothing and fails on the first problem. Call it from a chart
-whose `.Files` hold every app root, e.g. in CI over a checkout of every package, since each package
-renders on its own:
-
-```yaml
-{{- include "argocd-app-loader.check" (dict "Root" $ "roots" (list
-      (dict "name" "core" "path" "packages/core/apps" "wave" 0 "on" true)
-      (dict "name" "platform" "path" "packages/platform/apps" "wave" 10 "on" true))) -}}
-```
-
-Without `roots` it checks the chart's own `appsRoot`; a root without `on` is on, without `wave`
-at 0. An app is on when its root is on and its toggle is. The render fails when:
-
-- an app that is on lists under `requires:` a name that no app that is on has as its name or
-  under `provides:` (the message names every dependent);
-- a required app comes later, comparing (root wave, app wave). The same wave passes: `requires:`
-  says an app needs the other on, not healthy first; a lower wave says that;
-- two roots hold the same app name (they share `cluster.apps`) or the same group (one AppProject);
-- `requires:`/`provides:` isn't a list, or names nothing that exists.
+Opt-in: an app that isn't listed is never checked. The list sits in values every package reads
+(for a root of roots, the catalogue's `values.yaml`), so each package sees the dependencies of
+apps in other packages too:
 
 ```yaml
-# apps/observability/grafana/app.yaml
-requires:
-  - victoria-metrics-k8s-stack   # an app name
-  - storage.replicated           # or a capability some app provides:
+argocdAppLoader:
+  dependencies:
+    harbor:
+      package: platform          # the package its app is in; not needed in a single chart
+      requires:
+        - cnpg                   # an app's name (it must be listed too)
+        - storage.replicated     # or something a listed app provides
+    cnpg:
+      package: platform
+    longhorn:
+      package: core
+      provides:
+        - storage.replicated
 ```
+
+Every package's render checks its own listed apps. A listed app is on when its toggle is and its
+package is picked (`cluster.packages`, `cluster.instancePackages`). The render fails when:
+
+- an app that is on requires something that no app that is on is named or provides;
+- an app that is off is still required, by name or for something only it provides, by an app
+  that is on anywhere: `longhorn is off, but harbor (platform), openbao require
+  storage.replicated, which only it provides`. The render failing means nothing is synced, so
+  nothing is pruned; once the dependents are off, the removal goes through;
+- a requirement comes later: a later package wave, or inside one package a later app wave;
+- a required name isn't listed (a typo), a package name is unknown, a listed app isn't in the
+  package it names, or an app of this package is listed under another one.
+
+A `null` entry drops out, so a cluster's file can remove one the catalogue lists (an app still
+required elsewhere then fails every render). `argocdAppLoader.package` names the package being
+rendered; the root of roots sets it, and checks the whole list too, since switching a package off
+is its decision. `requires:`/`provides:` in an `app.yaml` fail the render: they moved here in 0.9.
+
+Limits: a package pinned to a version checks the list at that version; switching a provider and
+its dependents off in one commit passes, and the packages then prune in parallel, so switch the
+dependents off first; duplicate names of unlisted apps or of groups across packages aren't seen.
 
 ## Publishing & consuming
 

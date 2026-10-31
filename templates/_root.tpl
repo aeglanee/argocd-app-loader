@@ -31,10 +31,11 @@
   instanceLocalRepo (this repo), switched by cluster.useLocalGit; cluster.targetRevision (the
   catalogue's), instanceRevision. Git refs must be strings: an unquoted 1.10 would become 1.1.
 
-  The root can't read the packages' files (they're in other repos), so it doesn't run
-  argocd-app-loader.check across packages. It does tell every package the names the root and the packages
-  take (argocdAppLoader.takenNames): an app with one of them fails its package's render, since
-  it would replace that Application.
+  It checks the dependency list (argocdAppLoader.dependencies) across all packages, because
+  switching a package off is its decision; each package checks its own apps in its own render.
+  Package Applications are named pkg-<name>, so no package can share a name with an app. Each
+  package is told its own name (argocdAppLoader.package, for the dependency list it checks in its
+  own render) and the root's (argocdAppLoader.rootName, which no app may take).
 */ -}}
 {{- define "argocd-app-loader.root" -}}
 {{- $c := default dict .Values.cluster -}}
@@ -89,11 +90,16 @@
   {{- fail "argocd-app-loader: cluster.packages picks no package: the root would render only itself and prune every app. Pick at least one" -}}
 {{- end -}}
 
-{{- /* Names the root and the packages take; an app named the same would replace one. */ -}}
-{{- $names := dict .Release.Name "the root" -}}
+{{- /* Switching a package off prunes it here: check the dependencies across packages first. */ -}}
+{{- include "argocd-app-loader.dependencies" (dict "Root" $ "all" true) -}}
+
+{{- /* A catalogue and an instance package of one name would be one Application. */ -}}
+{{- $names := dict -}}
 {{- range $name := keys $catalogued | sortAlpha }}{{ include "argocd-app-loader.claimName" (dict "names" $names "name" $name "by" "a catalogue package") }}{{ end -}}
 {{- range $name := keys $instancePackages | sortAlpha }}{{ include "argocd-app-loader.claimName" (dict "names" $names "name" $name "by" "an instance package") }}{{ end -}}
-{{- $taken := keys $names | sortAlpha -}}
+{{- if hasPrefix "pkg-" .Release.Name -}}
+  {{- fail (printf "argocd-app-loader: the root is named %s, but pkg-* names are the packages'" .Release.Name) -}}
+{{- end -}}
 
 {{- /* Catalogue packages: in the catalogue repo, or another. */ -}}
 {{- range $name := keys $catalogued | sortAlpha }}
@@ -115,7 +121,7 @@
     {{- end }}
 ---
 {{ include "argocd-app-loader.rootApplication" (dict
-    "cluster" $c "name" $name "wave" $wave "taken" $taken
+    "cluster" $c "name" $name "wave" $wave "rootName" $.Release.Name
     "repoURL" $repoURL "targetRevision" $pkgRevision "path" $path
     "valueFiles" $valueFiles "refs" (list $defaults $valuesRef)) }}
   {{- end }}
@@ -129,7 +135,7 @@
   {{- $path := include "argocd-app-loader.cleanPath" (required (printf "argocd-app-loader: cluster.instancePackages.%s.path is required" $name) $p.path) }}
 ---
 {{ include "argocd-app-loader.rootApplication" (dict
-    "cluster" $c "name" $name "wave" $wave "taken" $taken
+    "cluster" $c "name" $name "wave" $wave "rootName" $.Release.Name
     "repoURL" $instance "targetRevision" $pkgRevision "path" $path
     "valueFiles" $valueFiles "refs" (list $catalogueRef $valuesRef)) }}
 {{- end }}
@@ -138,7 +144,7 @@
 {{- /* argocd-app-loader.claimName — fails when a second Application would get the same name. */ -}}
 {{- define "argocd-app-loader.claimName" -}}
 {{- with get .names .name -}}
-  {{- fail (printf "argocd-app-loader: %s and %s would both be Application/%s" . $.by $.name) -}}
+  {{- fail (printf "argocd-app-loader: %s and %s would both be Application/pkg-%s" . $.by $.name) -}}
 {{- end -}}
 {{- $_ := set .names .name .by -}}
 {{- end -}}
@@ -165,7 +171,8 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: {{ .name }}
+  {{- /* Packages get pkg-<name>: then no package can share a name with an app. */}}
+  name: {{ ternary .name (printf "pkg-%s" .name) (default false .isRoot) }}
   namespace: {{ .cluster.argocdNamespace | default "argocd" }}
   annotations:
     {{- if .isRoot }}
@@ -191,8 +198,8 @@ spec:
               repoURL: {{ .repoURL | quote }}
               targetRevision: {{ .targetRevision | quote }}
               path: {{ .path | quote }}
-            takenNames:                 # the root's and the packages': no app may take one
-              {{- toYaml .taken | nindent 14 }}
+            package: {{ .name | quote }}        # for the dependency list
+            rootName: {{ .rootName | quote }}   # no app may take it
         {{- end }}
     {{- range .refs }}
     - repoURL: {{ .repoURL | quote }}
