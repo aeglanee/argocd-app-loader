@@ -175,6 +175,13 @@ through. Common fields:
 > release/path are keyed by the bare app name; the loader **fails loudly** if two
 > groups contain an app with the same folder name.
 
+<!-- -->
+
+> **Files must parse.** A `_group.yaml`, or an enabled app's `app.yaml` or values file,
+> that isn't a valid YAML mapping (for `values.yaml.gotmpl`: after templating) fails the
+> render with the file name and the parser's error, instead of deploying the app with
+> empty values. A disabled app's files aren't read.
+
 #### Chart source (`chart:`) — multisource
 
 Instead of `repoURL`/`path`, an app may declare an upstream `chart:` block. The

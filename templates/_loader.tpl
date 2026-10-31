@@ -68,6 +68,7 @@
   {{- end -}}
   {{- if $enabled }}
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
+    {{- include "argocd-app-loader.requireYaml" (dict "parsed" $appMeta "file" $path) -}}
     {{- /* v2: does the app dir carry its own local chart (Chart.yaml + templates/)? → source B */ -}}
     {{- $hasLocalChart := ne ($.Files.Get (printf "%s/%s/%s/Chart.yaml" $appsRoot $group $name)) "" -}}
     {{- $groupPath := printf "%s/%s/_group.yaml" $appsRoot $group -}}
@@ -88,18 +89,20 @@
       back-compat with charts that only use string-internal templating.
     */ -}}
     {{- $rawValues := "" -}}
-    {{- $tmplPath := printf "%s/%s/%s/values.yaml.gotmpl" $appsRoot $group $name -}}
+    {{- $valuesPath := printf "%s/%s/%s/values.yaml.gotmpl" $appsRoot $group $name -}}
     {{- $plainPath := printf "%s/%s/%s/values.yaml" $appsRoot $group $name -}}
-    {{- if $.Files.Get $tmplPath -}}
-      {{- $rawValues = $.Files.Get $tmplPath -}}
+    {{- if $.Files.Get $valuesPath -}}
+      {{- $rawValues = $.Files.Get $valuesPath -}}
     {{- else if $.Files.Get $plainPath -}}
       {{- $rawValues = $.Files.Get $plainPath -}}
+      {{- $valuesPath = $plainPath -}}
     {{- end -}}
     {{- $wrapperValues := dict -}}
     {{- if $rawValues -}}
       {{- $rendered := tpl $rawValues $ -}}
       {{- if $rendered -}}
         {{- $wrapperValues = fromYaml $rendered | default dict -}}
+        {{- include "argocd-app-loader.requireYaml" (dict "parsed" $wrapperValues "file" $valuesPath "templated" true) -}}
       {{- end -}}
     {{- end }}
 ---
@@ -121,7 +124,8 @@
 {{- $groupGlob := printf "%s/*/_group.yaml" $appsRoot -}}
 {{- range $path, $_ := .Files.Glob $groupGlob }}
   {{- $group := index (splitList "/" $path) 1 -}}
-  {{- $meta  := $.Files.Get $path | fromYaml | default dict }}
+  {{- $meta  := $.Files.Get $path | fromYaml | default dict -}}
+  {{- include "argocd-app-loader.requireYaml" (dict "parsed" $meta "file" $path) }}
 ---
 {{ include "argocd-app-loader.appproject" (dict
     "name"   $group
@@ -131,4 +135,16 @@
     "Root"   $
 ) }}
 {{- end }}
+{{- end -}}
+
+{{- /*
+  fromYaml never fails: when a file doesn't parse into a mapping it returns {"Error": "error ..."},
+  which would otherwise be used as the file's content (an app whose values don't parse deploys its
+  chart's defaults). Fail instead.
+*/ -}}
+{{- define "argocd-app-loader.requireYaml" -}}
+{{- $err := toString (get .parsed "Error") -}}
+{{- if and (eq (len .parsed) 1) (hasPrefix "error " $err) -}}
+  {{- fail (printf "argocd-app-loader: %s is not a valid YAML mapping%s: %s" .file (ternary " after templating" "" (default false .templated)) $err) -}}
+{{- end -}}
 {{- end -}}

@@ -18,3 +18,34 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # Files that don't parse fail the render with the file's name.
+  - it: fails on values that are not valid YAML after templating
+    set:
+      cluster.apps.invalid-values: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocd-app-loader: apps/unit/invalid-values/values.yaml.gotmpl is not a valid YAML mapping after templating: "
+
+  - it: fails on a plain values.yaml that is not valid YAML, naming that file
+    set:
+      cluster.apps.invalid-plain-values: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocd-app-loader: apps/unit/invalid-plain-values/values.yaml is not a valid YAML mapping after templating: "
+
+  - it: fails on an app.yaml that is not valid YAML
+    set:
+      cluster.apps.invalid-app-yaml: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocd-app-loader: apps/unit/invalid-app-yaml/app.yaml is not a valid YAML mapping: "
+
+  # The group tests point appsRoot at a root of their own: every _group.yaml under the root
+  # becomes an AppProject, whether or not one of its apps is on.
+  - it: fails on a _group.yaml that is not valid YAML
+    set:
+      argocdAppLoader.appsRoot: invalid-groups
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocd-app-loader: invalid-groups/broken/_group.yaml is not a valid YAML mapping: "

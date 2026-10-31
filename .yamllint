@@ -8,6 +8,8 @@ ignore: |
   examples/consumer/apps/*/*/templates/
   charts/
   examples/consumer/charts/
+  # Deliberately broken, for the unit tests that expect the render to fail.
+  test/unit/**/invalid-*/
 
 rules:
   line-length:
