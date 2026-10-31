@@ -1,0 +1,3 @@
+# Where this chart sits in the fleet repo, so the root can point at itself.
+argocdAppLoader:
+  rootPath: root

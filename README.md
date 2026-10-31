@@ -354,72 +354,74 @@ cluster:
 
 ### The root of roots (`argocd-app-loader.root`)
 
-For a catalogue split into packages, each a chart that calls `argocd-app-loader.loader`. Call it
-from the catalogue's top chart, the one the hand-applied bootstrap Application renders:
+For a catalogue split into packages (each a chart that calls `argocd-app-loader.loader`) and a
+fleet repo with a folder per cluster. The root chart sits in the fleet repo; each cluster's
+hand-applied bootstrap Application renders it with that cluster's values:
 
 ```yaml
-# templates/root.yaml
+# fleet repo: root/templates/root.yaml
 {{- include "argocd-app-loader.root" . -}}
+---
+# fleet repo: root/values.yaml (where the chart sits, so the root can point at itself)
+argocdAppLoader:
+  rootPath: root
 ```
 
 It emits the root Application itself (named after the release, so it takes over the bootstrap
-copy), one Application per package the cluster picked, and runs `argocd-app-loader.check` over the
-packages in this repo. The chart must sit at its repo's root. `examples/catalogue` shows the whole
-shape.
+copy) and one Application per package the cluster picked. `examples/catalogue` and
+`examples/fleet` show the whole shape.
 
 ```yaml
-# the catalogue's values.yaml: which packages exist, their order, where they live
+# catalogue repo: values.yaml (which packages exist, their order, where they live; defaults)
 argocdAppLoader:
   packages:
     core:
-      wave: 0             # packages/core in this repo
+      wave: 0             # packages/core in the catalogue repo
     media:
       wave: 20            # another repo, resolved through cluster.mirrors (mirror: false opts out)
       repoURL: https://github.com/example/media-package.git   # path defaults to "."
-      provides:           # its apps' names or capabilities, for the check here
-        - jellyfin
 ---
-# the cluster's values
+# fleet repo: clusters/demo/values.yaml
 cluster:
-  remoteGitRepo: https://github.com/example/catalogue.git    # this repo
-  instanceRemoteRepo: https://github.com/example/cluster.git
+  remoteGitRepo: https://github.com/example/catalogue.git    # the catalogue
+  instanceRemoteRepo: https://github.com/example/fleet.git   # this repo
   instanceValuesFiles:                                       # later files win
-    - cluster-values.yaml
+    - clusters/demo/values.yaml
   packages:
     core: true
     media:
       version: v1.2.0     # a map counts as picked; version (a quoted git ref) is its only key
   instancePackages:
-    site:                                                    # in the cluster's repo
+    site:                                                    # in the fleet repo
       path: packages/site
       wave: 30
 ```
 
-| Package Application gets | Value |
+| Each Application gets | Value |
 |---|---|
-| sync-wave | its `wave`: a package waits until every lower wave is healthy (with an Application health check in `argocd-cm`) |
-| source | this repo at `packages/<name>`, another repo at `path`, or the cluster's repo for instance packages; at `version`, else the repo's revision (`cluster.targetRevision`, another repo's `HEAD`, `cluster.instanceRevision`) |
-| values | `$catalogue/values.yaml` (this repo's defaults, at the package's revision if it lives here), then each instance values file |
-| `argocdAppLoader.source` | where its own files are, for its apps' local charts |
+| values | the catalogue's `values.yaml` (through the `catalogue` ref; for a catalogue package at the package's own revision), then each instance values file, in order |
+| sync-wave (packages) | its `wave`: a package waits until every lower wave is healthy (with an Application health check in `argocd-cm`) |
+| source | the root: the fleet repo at `rootPath`; a package: the catalogue at `packages/<name>`, another repo at `path`, or the fleet repo for instance packages; at `version`, else that repo's revision (`cluster.targetRevision`, another repo's `HEAD`, `cluster.instanceRevision`) |
+| `argocdAppLoader.source` (packages) | where its own files are, for its apps' local charts |
+| `argocdAppLoader.takenNames` (packages) | the root's and every package's name: an app with one fails its package's render, since it would replace that Application |
 
-`cluster.useLocalGit` switches this repo and the cluster's repo between their `remote…` and
-`local…` URLs. The check reads the packages whose files are here: in this repo and at this
-revision. A package elsewhere, pinned to another version, or in the cluster's repo isn't read; it
-counts through its `provides:` list, and its apps' own `requires:` aren't checked.
-
-The render fails on:
+`cluster.useLocalGit` switches the catalogue and the fleet repo between their `remote…` and
+`local…` URLs. The render fails on:
 
 - a pick the catalogue doesn't have, a pick that is neither a bool nor a map, or a map key other
   than `version`;
 - picking nothing (the root would prune every app), or an empty `instanceValuesFiles`;
 - a missing `wave`, or a git ref that isn't a string;
-- two Applications with one name: the root, a package, an app in a package here.
+- the root, a catalogue package and an instance package sharing a name.
+
+The root can't read the packages' files, so `requires:` across packages is checked in CI, with
+`argocd-app-loader.check` over a checkout of every package's repo.
 
 ### Checks across roots (`argocd-app-loader.check`)
 
 A separate include that renders nothing and fails on the first problem. Call it from a chart
-whose `.Files` hold every app root, e.g. a root of roots whose packages each render on their
-own:
+whose `.Files` hold every app root, e.g. in CI over a checkout of every package, since each package
+renders on its own:
 
 ```yaml
 {{- include "argocd-app-loader.check" (dict "Root" $ "roots" (list
@@ -435,9 +437,7 @@ at 0. An app is on when its root is on and its toggle is. The render fails when:
 - a required app comes later, comparing (root wave, app wave). The same wave passes: `requires:`
   says an app needs the other on, not healthy first; a lower wave says that;
 - two roots hold the same app name (they share `cluster.apps`) or the same group (one AppProject);
-- `requires:`/`provides:` isn't a list, or names nothing that exists. With `"outside"`, a list of
-  packages that are on but not readable here (`{name, wave, provides}`), their `provides:` count
-  as met at the start of their wave.
+- `requires:`/`provides:` isn't a list, or names nothing that exists.
 
 ```yaml
 # apps/observability/grafana/app.yaml

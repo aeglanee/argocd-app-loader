@@ -1,7 +1,8 @@
 {{- /*
   argocd-app-loader.check — checks across several app roots that each render on their own, such as
-  the packages of a root of roots, where no single loader render sees every app. Call it from the
-  chart whose .Files hold all the roots; it renders nothing and fails on the first problem:
+  the packages of a root of roots, where no single loader render sees every app. Call it from a
+  chart whose .Files hold all the roots (in CI, a checkout of every package's repo); it renders
+  nothing and fails on the first problem:
 
     - app names are unique across roots (the roots share one cluster.apps toggle map);
     - group names are unique across roots (each group is one AppProject);
@@ -12,9 +13,6 @@
       {{- include "argocd-app-loader.check" (dict "Root" $ "roots" (list
             (dict "name" "core" "path" "packages/core/apps" "wave" 0 "on" true)
             (dict "name" "platform" "path" "packages/platform/apps" "wave" 10 "on" true))) -}}
-
-  "outside" lists packages that are on but whose files aren't here (another repo or revision):
-  {name, wave, provides}. Their provides: count as met, by an app at the start of their wave.
 
   Without "roots" it checks the chart's own argocdAppLoader.appsRoot as one root. A root without
   "on" is on, without "wave" at 0. An app is on when its root is on and its toggle is, by the same
@@ -72,17 +70,9 @@
   {{- end -}}
 {{- end -}}
 
-{{- range $o := default list .outside -}}
-  {{- range $n := $o.provides -}}
-    {{- $key := printf "%s from package %s" (toString $n) $o.name -}}
-    {{- $_ := set $apps $key (dict "dir" "" "on" true "requires" list "provides" list "order" (list (int $o.wave) -1000000) "where" (printf "wave %v" $o.wave) "offRoot" "" "virtual" true) -}}
-    {{- $_ := set $providers (toString $n) (append (get $providers (toString $n) | default list) $key) -}}
-  {{- end -}}
-{{- end -}}
-
 {{- range $name := keys $apps | sortAlpha -}}
   {{- $a := get $apps $name -}}
-  {{- if and $a.on (not $a.virtual) -}}
+  {{- if $a.on -}}
     {{- range $req := $a.requires -}}
       {{- $req = toString $req -}}
       {{- $candidates := get $providers $req | default list -}}

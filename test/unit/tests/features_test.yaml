@@ -281,3 +281,13 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "its values \\(values file or cluster.overrides\\) can't have a chart: block"
+
+  - it: fails on an app named like the root or a package
+    set:
+      cluster.apps.plain: true
+      argocdAppLoader.takenNames:
+        - cluster
+        - plain
+    asserts:
+      - failedTemplate:
+          errorPattern: "app unit/plain has the name of the root or a package; both would be Application/plain"

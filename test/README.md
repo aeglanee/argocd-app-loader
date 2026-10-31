@@ -8,8 +8,8 @@ change.
 | Fixture | Rendered into | Source |
 |---|---|---|
 | `examples/consumer` | `golden/example.yaml` | the README example |
-| `examples/catalogue` | `golden/catalogue.yaml` | a root of roots: packages here, in another repo, in the cluster's repo |
-| `examples/catalogue/packages/core` | `golden/catalogue-core.yaml` | one of its packages, as its Application renders it |
+| `examples/fleet/root` + `examples/catalogue/values.yaml` + `examples/fleet/clusters/demo/values.yaml` | `golden/fleet.yaml` | a root of roots: packages in the catalogue, in another repo, in the fleet repo |
+| `examples/catalogue/packages/core` | `golden/catalogue-core.yaml` | one of the catalogue's packages, as its Application renders it |
 | `fixtures/gitops` | `golden/gitops.yaml` | frozen copy of the real consumer |
 | `fixtures/gitops` + `second-cluster-values.yaml` | `golden/gitops-second.yaml` | a made-up second cluster, as a delta layered over the first |
 

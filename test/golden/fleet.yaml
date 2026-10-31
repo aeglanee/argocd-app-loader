@@ -1,5 +1,5 @@
 ---
-# Source: catalogue/templates/root.yaml
+# Source: root/templates/root.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -12,13 +12,17 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: "https://github.com/example/catalogue.git"
+    - repoURL: "https://github.com/example/fleet.git"
       targetRevision: "HEAD"
-      path: "."
+      path: "root"
       helm:
         valueFiles:
-          - $values/cluster-values.yaml
-    - repoURL: "https://github.com/example/cluster.git"
+          - $catalogue/values.yaml
+          - $values/clusters/demo/values.yaml
+    - repoURL: "https://github.com/example/catalogue.git"
+      targetRevision: "HEAD"
+      ref: catalogue
+    - repoURL: "https://github.com/example/fleet.git"
       targetRevision: "HEAD"
       ref: values
   destination:
@@ -40,7 +44,7 @@ spec:
       - CreateNamespace=true
 
 ---
-# Source: catalogue/templates/root.yaml
+# Source: root/templates/root.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -59,17 +63,22 @@ spec:
       helm:
         valueFiles:
           - $catalogue/values.yaml
-          - $values/cluster-values.yaml
+          - $values/clusters/demo/values.yaml
         valuesObject:
           argocdAppLoader:
             source:                     # where this package's files are
               repoURL: "https://github.com/example/catalogue.git"
               targetRevision: "HEAD"
               path: "packages/core"
+            takenNames:                 # the root's and the packages': no app may take one
+              - cluster
+              - core
+              - media
+              - site
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
-    - repoURL: "https://github.com/example/cluster.git"
+    - repoURL: "https://github.com/example/fleet.git"
       targetRevision: "HEAD"
       ref: values
   destination:
@@ -90,7 +99,7 @@ spec:
       - ServerSideApply=true
 
 ---
-# Source: catalogue/templates/root.yaml
+# Source: root/templates/root.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -109,17 +118,22 @@ spec:
       helm:
         valueFiles:
           - $catalogue/values.yaml
-          - $values/cluster-values.yaml
+          - $values/clusters/demo/values.yaml
         valuesObject:
           argocdAppLoader:
             source:                     # where this package's files are
               repoURL: "https://github.com/example/media-package.git"
               targetRevision: "v1.2.0"
               path: "."
+            takenNames:                 # the root's and the packages': no app may take one
+              - cluster
+              - core
+              - media
+              - site
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
-    - repoURL: "https://github.com/example/cluster.git"
+    - repoURL: "https://github.com/example/fleet.git"
       targetRevision: "HEAD"
       ref: values
   destination:
@@ -140,7 +154,7 @@ spec:
       - ServerSideApply=true
 
 ---
-# Source: catalogue/templates/root.yaml
+# Source: root/templates/root.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -153,23 +167,28 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: "https://github.com/example/cluster.git"
+    - repoURL: "https://github.com/example/fleet.git"
       targetRevision: "HEAD"
       path: "packages/site"
       helm:
         valueFiles:
           - $catalogue/values.yaml
-          - $values/cluster-values.yaml
+          - $values/clusters/demo/values.yaml
         valuesObject:
           argocdAppLoader:
             source:                     # where this package's files are
-              repoURL: "https://github.com/example/cluster.git"
+              repoURL: "https://github.com/example/fleet.git"
               targetRevision: "HEAD"
               path: "packages/site"
+            takenNames:                 # the root's and the packages': no app may take one
+              - cluster
+              - core
+              - media
+              - site
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
-    - repoURL: "https://github.com/example/cluster.git"
+    - repoURL: "https://github.com/example/fleet.git"
       targetRevision: "HEAD"
       ref: values
   destination:

@@ -17,6 +17,7 @@
     .Values.cluster.apps.<name>           Boolean on/off toggle for each app
     .Values.cluster.overrides.<name>      Merged over the app's rendered values
     .Values.argocdAppLoader.source        Where this chart's files live (repoURL, targetRevision, path)
+    .Values.argocdAppLoader.takenNames    Application names apps can't use (set by the root of roots)
 
   Customizable via .Values.argocdAppLoader:
     appsRoot       : root path to scan (default "apps")
@@ -54,6 +55,10 @@
     {{- fail (printf "argocd-app-loader: duplicate app name %q in groups %q and %q — app folder names must be unique across groups" $n (index $seenNames $n) $g) -}}
   {{- end -}}
   {{- $_ := set $seenNames $n $g -}}
+  {{- /* Names the root of roots says it and the packages take: an app with one would replace it. */ -}}
+  {{- if has $n (default list $cfg.takenNames) -}}
+    {{- fail (printf "argocd-app-loader: app %s/%s has the name of the root or a package; both would be Application/%s, so rename the app" $g $n $n) -}}
+  {{- end -}}
 {{- end -}}
 {{- /* The lowest wave of an app that is on (0 at most): AppProjects go one below it. */ -}}
 {{- $firstWave := 0 -}}

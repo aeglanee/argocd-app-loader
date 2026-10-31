@@ -1,0 +1,18 @@
+# One cluster: what it runs, and where things are. Layered over the catalogue's values.yaml.
+cluster:
+  domain: demo.example.com
+  remoteGitRepo: https://github.com/example/catalogue.git
+  instanceRemoteRepo: https://github.com/example/fleet.git
+  instanceValuesFiles:
+    - clusters/demo/values.yaml
+  packages:
+    core: true
+    media:
+      version: v1.2.0             # picked, pinned to a tag
+  instancePackages:
+    site:                         # a package in the fleet repo
+      path: packages/site
+      wave: 30
+  apps:
+    hello: true
+    needs-hello: true

@@ -14,17 +14,20 @@ tasks:
     cmds:
       - for:
           - examples/consumer
-          - examples/catalogue
+          - examples/fleet/root
           - test/fixtures/gitops
         cmd: rm -rf {{.ITEM}}/charts {{.ITEM}}/Chart.lock && helm dependency build {{.ITEM}} >/dev/null
       - helm template cluster examples/consumer --namespace argocd > test/golden/example.yaml
-      - helm template cluster examples/catalogue --namespace argocd > test/golden/catalogue.yaml
+      - >-
+        helm template cluster examples/fleet/root --namespace argocd -f examples/catalogue/values.yaml
+        -f examples/fleet/clusters/demo/values.yaml > test/golden/fleet.yaml
       - >-
         rm -rf examples/catalogue/packages/core/charts examples/catalogue/packages/core/Chart.lock
         && helm dependency build examples/catalogue/packages/core >/dev/null
       # The core package as its Application renders it: the catalogue's values, then where it lives.
       - >-
         helm template core examples/catalogue/packages/core --namespace argocd -f examples/catalogue/values.yaml
+        -f examples/fleet/clusters/demo/values.yaml
         --set argocdAppLoader.source.repoURL=https://github.com/example/catalogue.git
         --set argocdAppLoader.source.path=packages/core > test/golden/catalogue-core.yaml
       - >-

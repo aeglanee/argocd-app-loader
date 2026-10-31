@@ -1,9 +1,0 @@
-apiVersion: v2
-name: catalogue
-description: A catalogue's top chart, the root of roots. The bootstrap Application renders it.
-type: application
-version: 0.0.1
-dependencies:
-  - name: argocd-app-loader
-    version: ">=0.1.0"
-    repository: "file://../../"   # in-repo example; real catalogues pull a published version

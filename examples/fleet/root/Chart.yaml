@@ -1,0 +1,9 @@
+apiVersion: v2
+name: root
+description: The fleet's root of roots. Each cluster's bootstrap Application renders it with that cluster's values.
+type: application
+version: 0.0.1
+dependencies:
+  - name: argocd-app-loader
+    version: ">=0.1.0"
+    repository: "file://../../../"   # in-repo example; a real fleet pulls a published version
