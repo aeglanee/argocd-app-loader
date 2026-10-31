@@ -258,6 +258,22 @@ tests:
       - failedTemplate:
           errorPattern: "the root and a catalogue package would both be Application/cluster"
 
+  - it: fails on an instance package named like the root
+    set:
+      cluster.instancePackages.cluster:
+        path: x
+        wave: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "the root and an instance package would both be Application/cluster"
+
+  - it: fails without rootPath
+    set:
+      argocdAppLoader.rootPath: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocdAppLoader.rootPath is required"
+
   - it: fails on an instance package named like a catalogue package
     set:
       cluster.instancePackages.a:

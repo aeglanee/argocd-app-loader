@@ -414,8 +414,9 @@ cluster:
 - a missing `wave`, or a git ref that isn't a string;
 - the root, a catalogue package and an instance package sharing a name.
 
-The root can't read the packages' files, so `requires:` across packages is checked in CI, with
-`argocd-app-loader.check` over a checkout of every package's repo.
+The root can't read the packages' files, so it doesn't check `requires:` across packages. That
+needs `argocd-app-loader.check` over a checkout of every package's repo, e.g. in CI (not built
+yet).
 
 ### Checks across roots (`argocd-app-loader.check`)
 
@@ -498,7 +499,8 @@ A loader change that alters output fails `task check`; see [test/README.md](test
 
 Pre-1.0. The API is settling. Pin a version in your dependency. The next release (0.9) breaks
 0.8 consumers: `argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit`
-lookup, and `cluster:` is no longer injected into the apps.
+lookup, `cluster:` is no longer injected into the apps, and a root of roots is the new
+`argocd-app-loader.root`, whose chart sits in the fleet repo (`argocdAppLoader.rootPath`).
 
 ## License
 

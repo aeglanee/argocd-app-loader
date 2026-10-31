@@ -11,8 +11,8 @@
     - one Application per package the cluster picked, in package waves. A package is a chart
       that renders its apps with argocd-app-loader.loader.
 
-  The root chart sits in the instance repo, at argocdAppLoader.rootPath (default "."); set it in
-  the root chart's own values.yaml. It reads the catalogue's values.yaml (package list and
+  The root chart sits in the instance repo, at argocdAppLoader.rootPath (required); set it in the
+  root chart's own values.yaml. It reads the catalogue's values.yaml (package list and
   defaults) and the instance's files, in that order, and so does every package.
 
   Catalogue (its values.yaml):
@@ -31,8 +31,8 @@
   instanceLocalRepo (this repo), switched by cluster.useLocalGit; cluster.targetRevision (the
   catalogue's), instanceRevision. Git refs must be strings: an unquoted 1.10 would become 1.1.
 
-  The root can't read the packages' files (they're in other repos), so argocd-app-loader.check
-  across packages runs in CI. It does tell every package the names the root and the packages
+  The root can't read the packages' files (they're in other repos), so it doesn't run
+  argocd-app-loader.check across packages. It does tell every package the names the root and the packages
   take (argocdAppLoader.takenNames): an app with one of them fails its package's render, since
   it would replace that Application.
 */ -}}
@@ -40,7 +40,8 @@
 {{- $c := default dict .Values.cluster -}}
 {{- $local := default false $c.useLocalGit -}}
 {{- $catalogueKey := ternary "localGitRepo" "remoteGitRepo" $local -}}
-{{- $rootPath := include "argocd-app-loader.cleanPath" (default "." (default dict .Values.argocdAppLoader).rootPath) -}}
+{{- /* Required: Helm can't know where the chart sits, and a wrong path strands the root. */ -}}
+{{- $rootPath := include "argocd-app-loader.cleanPath" (required "argocd-app-loader: argocdAppLoader.rootPath is required: the root chart's folder in this repo (set it in the chart's own values.yaml)" (default dict .Values.argocdAppLoader).rootPath) -}}
 {{- $instanceKey := ternary "instanceLocalRepo" "instanceRemoteRepo" $local -}}
 {{- $catalogue := tpl (toString (required (printf "argocd-app-loader: cluster.%s is required (the catalogue's repo)" $catalogueKey) (get $c $catalogueKey))) . -}}
 {{- $instance := tpl (toString (required (printf "argocd-app-loader: cluster.%s is required (this repo, the cluster's)" $instanceKey) (get $c $instanceKey))) . -}}

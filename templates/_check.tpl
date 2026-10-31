@@ -22,7 +22,7 @@
 {{- define "argocd-app-loader.check" -}}
 {{- $root := .Root -}}
 {{- $cfg := default dict $root.Values.argocdAppLoader -}}
-{{- /* hasKey, not default: an empty list (every package elsewhere) must stay empty. */ -}}
+{{- /* hasKey, not default: an empty list of roots must stay empty, not become appsRoot. */ -}}
 {{- $roots := ternary .roots (list (dict "name" "" "path" (default "apps" $cfg.appsRoot) "wave" 0 "on" true)) (hasKey . "roots") -}}
 {{- $apps := dict -}}
 {{- $groups := dict -}}
