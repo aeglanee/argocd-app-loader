@@ -1,0 +1,3 @@
+# Roots for the check tests only (set check.roots).
+provides:
+  - csi
