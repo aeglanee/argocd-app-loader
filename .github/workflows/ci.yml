@@ -2,8 +2,12 @@
 name: CI
 
 on:
+  # Branches only: a v* tag runs CI through release.yml, other tags run none.
   push:
+    branches:
+      - '**'
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -11,8 +15,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:

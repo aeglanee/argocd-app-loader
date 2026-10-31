@@ -476,7 +476,9 @@ from one of:
 
   Publish from CI with
   `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`. Argo CD supports
-  OCI Helm repos natively.
+  OCI Helm repos natively. This repo's [release.yml](.github/workflows/release.yml)
+  does it for a `v*` tag: CI again, then a push that waits for approval in the
+  `release` environment and refuses a version ghcr already has.
 
 - **HTTPS Helm repo** (e.g. GitHub Pages):
 
