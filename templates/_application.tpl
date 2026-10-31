@@ -161,10 +161,14 @@ spec:
           "backoff" (dict
             "duration" "30s"
             "factor" 2
-            "maxDuration" "5m"))
-        "syncOptions" (concat
+            "maxDuration" "5m")) -}}
+    {{- /* concat of two empty lists is nil, which toYaml writes as `syncOptions: null`. */ -}}
+    {{- $syncOptions := concat
           (ternary (list "CreateNamespace=true") (list) (default false .appMeta.createNamespace))
-          (.appMeta.syncOptions | default list)) -}}
+          (.appMeta.syncOptions | default list) -}}
+    {{- if $syncOptions -}}
+      {{- $_ := set $defaultSyncPolicy "syncOptions" $syncOptions -}}
+    {{- end -}}
     {{- toYaml (.appMeta.syncPolicy | default $defaultSyncPolicy) | nindent 4 }}
   {{- with .appMeta.ignoreDifferences }}
   ignoreDifferences:

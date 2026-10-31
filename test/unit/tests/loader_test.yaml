@@ -49,3 +49,21 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "argocd-app-loader: invalid-groups/broken/_group.yaml is not a valid YAML mapping: "
+
+  # syncOptions
+  - it: leaves out syncOptions when there are none
+    set:
+      cluster.apps.plain: true
+    asserts:
+      - notExists:
+          path: spec.syncPolicy.syncOptions
+
+  - it: puts CreateNamespace=true ahead of the app's own syncOptions
+    set:
+      cluster.apps.sync-options: true
+    asserts:
+      - equal:
+          path: spec.syncPolicy.syncOptions
+          value:
+            - CreateNamespace=true
+            - ServerSideApply=true

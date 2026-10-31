@@ -1,0 +1,4 @@
+project: unit
+createNamespace: true
+syncOptions:
+  - ServerSideApply=true
