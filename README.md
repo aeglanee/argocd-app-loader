@@ -67,7 +67,7 @@ type: application
 version: 0.1.0
 dependencies:
   - name: argocd-app-loader
-    version: "0.9.0"
+    version: "0.10.0"
     repository: "oci://ghcr.io/aeglanee/charts"
     # Or, for a local checkout during library development:
     # repository: "file://../../argocd-app-loader"
@@ -530,7 +530,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.9.0"
+      version: "0.10.0"
       repository: "oci://ghcr.io/<owner>/charts"
   ```
 
@@ -545,7 +545,7 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.9.0"
+      version: "0.10.0"
       repository: "https://<owner>.github.io/argocd-app-loader"
   ```
 
@@ -572,11 +572,11 @@ A loader change that alters output fails `task check`; see [test/README.md](test
 
 ## Status
 
-Pre-1.0. The API is settling. Pin a version in your dependency. The next release breaks 0.9
-consumers of the root of roots: a pick is `{enabled: true}`, toggles and overrides sit under
-their package (`cluster.packages.<package>.apps`, `.overrides`), the catalogue's
-`argocdAppLoader.packages` moves into the same `cluster.packages` map (wave, source, every app
-with its usual on/off), and dependency entries drop `package:`. Values files ask
+Pre-1.0. The API is settling. Pin a version in your dependency. 0.10 breaks 0.9 consumers of
+the root of roots: a pick is `{enabled: true}`, toggles and overrides sit under their package
+(`cluster.packages.<package>.apps`, `.overrides`), the catalogue's `argocdAppLoader.packages`
+moves into the same `cluster.packages` map (wave, source, every app with its usual on/off), and
+dependency entries drop `package:`. Values files ask
 `argocd-app-loader.running` instead of reading `cluster.apps`. A single chart without packages
 is unchanged. Move the root chart and every package chart to the new release together, with the
 values: a package still on 0.9 finds no `cluster.apps` and switches all its apps off, and so does
