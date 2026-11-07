@@ -4,7 +4,7 @@ A Helm **library chart** that renders Argo CD `Application` and `AppProject`
 custom resources from a **filesystem layout**. Drop it into your cluster
 "app-of-apps" chart and stop maintaining a 500-line registry of every app.
 
-> Style and permissive-templating approach influenced by
+> Style influenced by
 > [`argoproj/argo-helm/charts/argocd-apps`](https://github.com/argoproj/argo-helm/tree/main/charts/argocd-apps).
 > The differentiator here is **filesystem discovery** — apps are scanned
 > from disk instead of declared in a flat values map — and **templated
@@ -125,8 +125,7 @@ description: "CNI, storage, ingress, certificates"
 
 ### `app.yaml` (per-app metadata)
 
-Permissive — any field accepted in an Argo CD `Application` spec passes
-through. Common fields:
+Only the fields below are read; anything else in `app.yaml` is ignored.
 
 | Field | Required | Default | Notes |
 |---|---|---|---|
@@ -144,7 +143,7 @@ through. Common fields:
 | `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps) |
 | `helm` | no | – | Extra `helm` block fields for the auto-built source; they win over the pinned `kubeVersion`/`apiVersions` |
 | `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs). Missing or null gets the default |
-| `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | sensible defaults | Pass through (`revisionHistoryLimit: 0` included) |
+| `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | – | Copied onto the Application (`revisionHistoryLimit: 0` included); the sync-wave annotation is always added |
 
 > **Caveat — `sources` bypasses the values file.** The tpl-rendered wrapper values reach
 > only the auto-built sources. If you declare `sources:`, they're emitted verbatim and you
@@ -260,8 +259,7 @@ it, and upstream values there aren't templated.
 
 Merged over the app's rendered values file, last: maps merge, lists and scalars are replaced.
 `chart:` goes to the upstream chart as usual. A value that isn't a mapping fails the render. In a
-package (see **The root of roots**), an override sits under its package, and one naming an app
-of another package, or none, fails the render.
+package (see **The root of roots**), an override sits under its package.
 
 ```yaml
 cluster:
@@ -324,7 +322,7 @@ Recognised by the loader:
 |---|---|
 | `apps` | On/off toggles in a single chart, below; in a package they sit under `packages.<package>.apps` and the flat key fails the render |
 | `overrides` | Per-app values merged last — see **Per-app overrides** above; in a package under `packages.<package>.overrides` |
-| `packages`, `instancePackages` | What a cluster picks, with its toggles and overrides — see **The root of roots** |
+| `packages`, `instancePackages` | Each package's wave, source and apps from the catalogue, and what a cluster picks, toggles and overrides — see **The root of roots** |
 | `kubeVersion`, `apiVersions` | Pinned on every Helm and Kustomize source — see **Pinned Kubernetes and API versions** |
 | `clusterServer` | Application destination cluster (default `https://kubernetes.default.svc`) |
 | `argocdNamespace` | Where Application/AppProject CRs live (default `argocd`) |
@@ -333,7 +331,7 @@ Recognised by the loader:
 Nothing under `cluster:` reaches the apps by itself: a values file passes what its chart
 needs, e.g. `hostname: grafana.{{ .Values.cluster.domain }}`. The 0.8 key `repoBasePath` fails
 the render (now `argocdAppLoader.source.path`); `useLocalGit`, `remoteGitRepo`, `localGitRepo`
-and `targetRevision` are no longer read: resolve them where `argocdAppLoader.source` is set.
+and `targetRevision` are no longer read by the loader (the root of roots reads them, below).
 
 ### App toggles (`.Values.cluster.apps`)
 
@@ -351,8 +349,8 @@ cluster:
 
 In a package, `cluster.packages.<package>.apps` lists every app: the catalogue gives each its
 usual value and a cluster's file changes only where it differs (see **The root of roots**). A
-toggle that isn't `true` or `false`, an app listed under two packages, or one its package has no
-folder for fails the render.
+toggle that isn't `true` or `false` fails the render; the app list's other checks are under
+**Dependencies**.
 
 #### Lookups for values files
 
@@ -361,8 +359,8 @@ folder for fails the render.
 | `argocd-app-loader.running` | the app runs here: its package is picked and it is on; in a single chart, its toggle | `{{ if eq (include "argocd-app-loader.running" (dict "Values" .Values "name" "authentik")) "true" }}` |
 | `argocd-app-loader.provided` | an app that runs here lists the name under `provides:` in the dependency list | `{{ ternary "https" "http" (eq (include "argocd-app-loader.provided" (dict "Values" .Values "name" "tls")) "true") }}` |
 
-Both fail on a name no package lists (`running`) or the dependency list doesn't know (`provided`)
-knows, so a typo can't read as "off". A lookup is soft: switching the app off changes the
+With packages, `running` fails on a name no package lists; in a single chart it is the toggle.
+`provided` fails on a name no entry lists under `provides:`. A lookup is soft: switching the app off changes the
 values on the next sync instead of failing a render; use `requires:` where the app needs it.
 
 ### Loader configuration (`.Values.argocdAppLoader`)
@@ -507,8 +505,10 @@ Every package's render checks its own apps. An app is on when its package is pic
 - a package's app list and its folders disagree: an app folder the list doesn't name or puts in
   another package, a list entry without a folder, or one app in two packages.
 
-A `null` entry drops its `requires` and `provides`, so a cluster's file can remove what the
-catalogue lists (an app that still needs the capability then fails every render).
+A cluster's file can change an entry. Lists replace, so `requires:` there repeats the whole list
+minus what the cluster brings itself (e.g. `storage.replicated` where storage comes from outside
+the catalogue); a requirement the catalogue adds later isn't in that copy. A `null` entry drops
+its `requires` and `provides` (an app that still needs the capability then fails every render).
 `argocdAppLoader.package` names the package being rendered; the root of roots sets it, and checks
 the whole list too, since switching a package off is its decision. `requires:`/`provides:` in an
 `app.yaml` fail the render: they moved here in 0.9.
@@ -540,22 +540,10 @@ from one of:
   does it for a `v*` tag: CI again, then a push that waits for approval in the
   `release` environment and refuses a version ghcr already has.
 
-- **HTTPS Helm repo** (e.g. GitHub Pages):
-
-  ```yaml
-  dependencies:
-    - name: argocd-app-loader
-      version: "0.10.0"
-      repository: "https://<owner>.github.io/argocd-app-loader"
-  ```
-
-  Requires a CI workflow that packages the chart and updates `index.yaml`
-  on the gh-pages branch.
-
 - **Local filesystem** (`file://`): only useful when iterating on the
   library and a consumer side-by-side in the same checkout. Not portable.
   The `examples/consumer/` directory in this repo uses this for its
-  in-repo demo, but real deployments should use OCI or HTTPS.
+  in-repo demo; real deployments use OCI.
 
 ## Development
 
@@ -565,25 +553,26 @@ and [pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all 
 
 ```sh
 nix develop -c pre-commit install   # once; hooks then run on every commit
-nix develop -c task check           # lint + golden renders, as CI runs them
+nix develop -c task check           # lint, unit tests, golden renders, schema check: as CI runs them
 ```
 
 A loader change that alters output fails `task check`; see [test/README.md](test/README.md).
 
 ## Status
 
-Pre-1.0. The API is settling. Pin a version in your dependency. 0.10 breaks 0.9 consumers of
-the root of roots: a pick is `{enabled: true}`, toggles and overrides sit under their package
-(`cluster.packages.<package>.apps`, `.overrides`), the catalogue's `argocdAppLoader.packages`
-moves into the same `cluster.packages` map (wave, source, every app with its usual on/off), and
-dependency entries drop `package:`. Values files ask
-`argocd-app-loader.running` instead of reading `cluster.apps`. A single chart without packages
-is unchanged. Move the root chart and every package chart to the new release together, with the
-values: a package still on 0.9 finds no `cluster.apps` and switches all its apps off, and so does
-a package pinned to a tag built on 0.9. 0.9 broke 0.8 consumers:
-`argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit` lookup, `cluster:` is
-no longer injected into the apps, and a root of roots is the new `argocd-app-loader.root`, whose
-chart sits in the fleet repo (`argocdAppLoader.rootPath`).
+Pre-1.0: pin a version. Breaking changes per release:
+
+- **0.10** (root of roots only; a single chart without packages is unchanged):
+  - a pick is `{enabled: true}`; toggles and overrides sit under their package
+    (`cluster.packages.<package>.apps`, `.overrides`);
+  - the catalogue's `argocdAppLoader.packages` moves into the same `cluster.packages` map (wave,
+    source, every app with its usual on/off); dependency entries drop `package:`;
+  - values files ask `argocd-app-loader.running` instead of reading `cluster.apps`;
+  - move the root chart, every package chart and the values together: a package still on 0.9 (or
+    pinned to a tag built on 0.9) finds no `cluster.apps` and switches all its apps off.
+- **0.9**: `argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit` lookup;
+  `cluster:` is no longer injected into the apps; a root of roots is `argocd-app-loader.root`,
+  its chart in the fleet repo (`argocdAppLoader.rootPath`).
 
 ## License
 

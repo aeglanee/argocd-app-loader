@@ -1,12 +1,11 @@
 {{- /*
   argocd-app-loader.appproject — render one Argo CD AppProject from a metadata dict.
 
-  Permissive: any AppProject spec field declared in meta passes through via
-  toYaml. Sensible defaults applied for fields not declared.
+  Reads the fields the README's _group.yaml table lists; anything else in meta is ignored.
 
   Expected input dict keys:
     name   : project name (= group folder name by convention)
-    meta   : parsed _group.yaml content (may carry any AppProject spec field)
+    meta   : parsed _group.yaml content
     wave   : sync-wave, below every app that is on: an app whose project doesn't exist yet is
              never reconciled, so with the Application health check its wave would never finish
     cluster : .Values.cluster from the consumer chart

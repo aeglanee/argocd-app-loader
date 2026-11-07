@@ -7,7 +7,7 @@ change.
 
 | Fixture | Rendered into | Source |
 |---|---|---|
-| `examples/consumer` | `golden/example.yaml` | the README example |
+| `examples/consumer` | `golden/example.yaml` | a single chart (no packages) |
 | `examples/fleet/root` + `examples/catalogue/values.yaml` + `examples/fleet/clusters/demo/values.yaml` | `golden/fleet.yaml` | a root of roots: packages in the catalogue, in another repo, in the fleet repo |
 | `examples/catalogue/packages/core` | `golden/catalogue-core.yaml` | one of the catalogue's packages, as its Application renders it |
 | `fixtures/gitops` | `golden/gitops.yaml` | frozen copy of the real consumer |

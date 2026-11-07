@@ -6,10 +6,9 @@ version: 0.0.1
 
 # This example is checked into the same repo as the library itself, so it
 # resolves the dependency via a relative file:// path. Real consumers should
-# pull a published version from an OCI or HTTPS Helm repository instead, e.g.:
+# pull a published version from the OCI repository instead:
 #
 #   repository: "oci://ghcr.io/<owner>/charts"
-#   repository: "https://<owner>.github.io/argocd-app-loader"
 #
 # See README.md "Quick start" for the published-consumer setup.
 dependencies:

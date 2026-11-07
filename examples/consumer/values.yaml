@@ -27,7 +27,7 @@ cluster:
         via: forgejo
         repo: rustfs-operator
 
-  # App on/off toggles. Values files can read them too (e.g. to branch on a peer app).
+  # App on/off toggles. A values file asks argocd-app-loader.running about a peer app.
   apps:
     hello: true
     gitchart: true

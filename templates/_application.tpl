@@ -1,13 +1,12 @@
 {{- /*
   argocd-app-loader.application — render one Argo CD Application from a metadata dict.
 
-  Permissive: any field declared in the input dict's appMeta passes through
-  via toYaml, mirroring the style of argoproj/argo-helm/charts/argocd-apps.
+  Reads the fields the README's app.yaml table lists; anything else in appMeta is ignored.
 
   Expected input dict keys:
     name      : app folder name (also default release name)
     group     : group folder name (also default project)
-    appMeta   : parsed app.yaml content (may carry any Application spec field)
+    appMeta   : parsed app.yaml content
     groupMeta : parsed _group.yaml content (fallbacks for project/etc)
     appDir    : the app folder inside the consumer chart (<appsRoot>/<group>/<name>)
     hasLocalChart, hasKustomize : what the app folder holds
