@@ -2,6 +2,14 @@ suite: loader
 templates:
   - render.yaml
 tests:
+  - it: fails on toggles that aren't a map, instead of reading them as none and pruning every app
+    set:
+      cluster.apps:
+        - plain
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.apps must be a map of <app>: ..., got \\[plain\\] \\(a slice\\)"
+
   - it: renders an enabled app as an Application
     set:
       cluster.apps.plain: true

@@ -1,0 +1,290 @@
+suite: packages
+templates:
+  - render.yaml
+  - lookups.yaml
+set:
+  argocdAppLoader:
+    package: unit
+    dependencies:
+      store:
+        provides:
+          - storage
+  cluster:
+    apps: null
+    packages:
+      base:
+        wave: 0
+        apps:
+          store: true
+        enabled: true
+      unit:
+        wave: 10
+        # Every app folder of the unit chart; plain and sync-options are its usual apps.
+        apps:
+          external: false
+          external-chart: false
+          external-nopath: false
+          finalizers-string: false
+          history-zero: false
+          invalid-app-yaml: false
+          invalid-plain-values: false
+          invalid-values: false
+          kustomize-chart: false
+          kustomized: false
+          kustomized-helm: false
+          kustomize-only: false
+          kustomize-values-chart: false
+          kustomize-values-only: false
+          kustomize-yml: false
+          manual-sync: false
+          no-finalizers: false
+          null-finalizers: false
+          old-requires: false
+          plain: true
+          sources-chart: false
+          sync-options: true
+          verbatim: false
+          waved: false
+          wrapped: false
+          wrapped-helm: false
+        enabled: true
+      late:
+        wave: 20
+        apps:
+          consumer: true
+        enabled: true
+tests:
+  - it: renders the package's usual apps and leaves out the others
+    template: render.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Application
+        documentSelector:
+          path: metadata.name
+          value: plain
+      - isKind:
+          of: Application
+        documentSelector:
+          path: metadata.name
+          value: sync-options
+
+  - it: switches on an app that is usually off, and off one that is usually on
+    template: render.yaml
+    set:
+      cluster.packages.unit.apps:
+        verbatim: true
+        sync-options: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Application
+        documentSelector:
+          path: metadata.name
+          value: verbatim
+
+  - it: merges the package's override over the rendered values, replacing lists
+    template: render.yaml
+    documentSelector:
+      path: metadata.name
+      value: wrapped
+    set:
+      cluster.packages.unit.apps.wrapped: true
+      cluster.packages.unit.overrides.wrapped:
+        chart:
+          args:
+            - --b
+        route:
+          gateway: other
+    asserts:
+      - equal:
+          path: spec.sources[0].helm.valuesObject
+          value:
+            replicas: 1
+            args:
+              - --b
+      - equal:
+          path: spec.sources[1].helm.valuesObject
+          value:
+            route:
+              hostname: wrapped.example.com
+              gateway: other
+
+  - it: fails on an override that isn't a mapping, naming its place
+    template: render.yaml
+    set:
+      cluster.packages.unit.apps.wrapped: true
+      cluster.packages.unit.overrides.wrapped: oops
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.unit.overrides.wrapped must be a mapping of values, got string"
+
+  - it: fails in the package's own render on a pick that isn't a map, which would drop its toggles
+    template: render.yaml
+    set:
+      cluster.packages.unit: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.unit must be a map, \\{enabled: true\\} or \\{enabled: false\\}, got true \\(a bool\\)"
+
+  - it: checks the folders against the package list even when nothing is listed
+    template: render.yaml
+    set:
+      argocdAppLoader.dependencies: null
+      cluster.packages.base.apps: null
+      cluster.packages.unit.apps: null
+      cluster.packages.late.apps: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "app external has a folder in package unit, but cluster.packages.unit.apps doesn't list it"
+
+  - it: fails on flat toggles, which would do nothing with packages
+    template: render.yaml
+    set:
+      cluster.apps:
+        plain: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.apps: with packages, set cluster.packages.<package>.apps"
+
+  - it: fails on flat overrides, which would do nothing with packages
+    template: render.yaml
+    set:
+      cluster.overrides:
+        plain: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.overrides: with packages, set cluster.packages.<package>.overrides"
+
+  - it: fails on a toggle under the wrong package, which lists the app twice
+    template: render.yaml
+    set:
+      cluster.packages.unit.apps.store: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "app store is listed under two packages, base and unit"
+
+  - it: fails on a misspelt toggle in the package's own render
+    template: render.yaml
+    set:
+      cluster.packages.unit.apps.plian: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.unit.apps lists plian, but the package has no folder for it \\(a typo\\?\\)"
+
+  - it: fails on an override under the wrong package
+    template: render.yaml
+    set:
+      cluster.packages.unit.overrides.store:
+        x: 1
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.unit.overrides.store: store is in package base"
+
+  - it: fails on a toggle that isn't true or false
+    template: render.yaml
+    set:
+      cluster.packages.unit.apps.verbatim: "yes"
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.unit.apps.verbatim must be true or false, got yes"
+
+  - it: fails on a catalogue value that isn't true or false
+    template: render.yaml
+    set:
+      cluster.packages.base.apps.store: "on"
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.base.apps.store must be true or false, got on"
+  # Lookups for values files.
+
+  - it: says an app runs when its package is picked and it is on
+    template: lookups.yaml
+    set:
+      lookupTest:
+        running: [plain, verbatim, store, consumer]
+    asserts:
+      - equal:
+          path: data
+          value:
+            running-plain: "true"
+            running-verbatim: "false"
+            running-store: "true"
+            running-consumer: "true"
+
+  - it: says an app in a package that isn't picked doesn't run, whatever its toggle
+    template: lookups.yaml
+    set:
+      cluster.packages.late:
+        enabled: false
+        apps:
+          consumer: true
+      lookupTest:
+        running: [consumer]
+    asserts:
+      - equal:
+          path: data.running-consumer
+          value: "false"
+
+  - it: counts the package being rendered as picked, as its own render does
+    template: lookups.yaml
+    set:
+      cluster.packages.unit.enabled: false
+      lookupTest:
+        running: [plain]
+    asserts:
+      - equal:
+          path: data.running-plain
+          value: "true"
+
+  - it: doesn't count a pick whose enabled is a string, as the root wouldn't emit it
+    template: lookups.yaml
+    set:
+      cluster.packages.late.enabled: "true"
+      lookupTest:
+        running: [consumer]
+    asserts:
+      - equal:
+          path: data.running-consumer
+          value: "false"
+
+  - it: fails on an app no package lists
+    template: lookups.yaml
+    set:
+      lookupTest:
+        running: [plian]
+    asserts:
+      - failedTemplate:
+          errorPattern: "running: no package lists app plian \\(a typo\\?\\)"
+
+  - it: says a capability is provided while an app that provides it runs
+    template: lookups.yaml
+    set:
+      lookupTest:
+        provided: [storage]
+    asserts:
+      - equal:
+          path: data.provided-storage
+          value: "true"
+
+  - it: says a capability isn't provided once its provider is off
+    template: lookups.yaml
+    set:
+      cluster.packages.base.apps.store: false
+      lookupTest:
+        provided: [storage]
+    asserts:
+      - equal:
+          path: data.provided-storage
+          value: "false"
+
+  - it: fails on a capability no app provides
+    template: lookups.yaml
+    set:
+      lookupTest:
+        provided: [storag]
+    asserts:
+      - failedTemplate:
+          errorPattern: "provided: no app in the dependency list provides storag \\(a typo\\?\\)"

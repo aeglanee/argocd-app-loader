@@ -14,8 +14,11 @@
   Conventions consumed:
     apps/<group>/_group.yaml             AppProject metadata
     apps/<group>/<name>/app.yaml         Application metadata
-    .Values.cluster.apps.<name>           Boolean on/off toggle for each app
-    .Values.cluster.overrides.<name>      Merged over the app's rendered values
+    .Values.cluster.packages.<package>.apps.<name>       On/off: the catalogue's usual value, or
+                                                         the cluster's (a single chart:
+                                                         .Values.cluster.apps.<name>)
+    .Values.cluster.packages.<package>.overrides.<name>  Merged over the app's rendered values (a
+                                                         single chart: .Values.cluster.overrides)
     .Values.argocdAppLoader.source        Where this chart's files live (repoURL, targetRevision, path)
     .Values.argocdAppLoader.package       This package's name, rootName the root's (set by the root of roots)
     .Values.argocdAppLoader.dependencies  The dependency list, checked here (see _dependencies.tpl)
@@ -38,6 +41,9 @@
 {{- if hasKey (default dict $.Values.cluster) "repoBasePath" -}}
   {{- fail "argocd-app-loader: cluster.repoBasePath was removed in 0.9 — set argocdAppLoader.source.path (see README)" -}}
 {{- end -}}
+{{- if $cfg.package }}{{ include "argocd-app-loader.noFlatToggles" $.Values.cluster }}{{ end -}}
+{{- $overrides := include "argocd-app-loader.scoped" (dict "Values" $.Values "package" $cfg.package "key" "overrides") | fromYaml -}}
+{{- $overridesKey := include "argocd-app-loader.scopedKey" (dict "Values" $.Values "package" $cfg.package "key" "overrides") -}}
 
 {{- /* Emit one Application per discovered app.yaml */ -}}
 {{- $appGlob := printf "%s/*/*/app.yaml" $appsRoot -}}
@@ -67,7 +73,7 @@
   {{- $parts := splitList "/" $path -}}
   {{- $group := index $parts (sub (len $parts) 3) -}}
   {{- $name  := index $parts (sub (len $parts) 2) -}}
-  {{- if eq (include "argocd-app-loader.isOn" (dict "Values" $.Values "name" $name)) "true" }}
+  {{- if eq (include "argocd-app-loader.isOn" (dict "Values" $.Values "name" $name "package" $cfg.package)) "true" }}
     {{- $appMeta := $.Files.Get $path | fromYaml -}}
     {{- include "argocd-app-loader.requireYaml" (dict "parsed" $appMeta "file" $path) -}}
     {{- $firstWave = min $firstWave (int (default 0 $appMeta.wave)) -}}
@@ -128,10 +134,10 @@
       {{- end -}}
     {{- end -}}
     {{- /* The instance's escape hatch, merged last: maps merge, lists and scalars are replaced. */ -}}
-    {{- $override := index (default dict $.Values.cluster.overrides) $name -}}
+    {{- $override := index $overrides $name -}}
     {{- if not (kindIs "invalid" $override) -}}
       {{- if not (kindIs "map" $override) -}}
-        {{- fail (printf "argocd-app-loader: cluster.overrides.%s must be a mapping of values, got %s" $name (kindOf $override)) -}}
+        {{- fail (printf "argocd-app-loader: %s.%s must be a mapping of values, got %s" $overridesKey $name (kindOf $override)) -}}
       {{- end -}}
       {{- $wrapperValues = mustMergeOverwrite (deepCopy $wrapperValues) (deepCopy $override) -}}
     {{- end }}

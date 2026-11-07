@@ -123,7 +123,7 @@ spec:
   {{- /* Kustomize form: Kustomize renders kustomize/ (helmCharts: + patches:), the local chart the
          rest. Upstream values live in kustomize/, so a values `chart:` block has nowhere to go. */ -}}
   {{- if hasKey (default dict .wrapperValues) "chart" -}}
-    {{- fail (printf "argocd-app-loader: app %s uses the Kustomize form, so its values (values file or cluster.overrides) can't have a chart: block; put the upstream chart's values in kustomize/ (helmCharts valuesFile or valuesInline)" .name) -}}
+    {{- fail (printf "argocd-app-loader: app %s uses the Kustomize form, so its values (values file or override) can't have a chart: block; put the upstream chart's values in kustomize/ (helmCharts valuesFile or valuesInline)" .name) -}}
   {{- end -}}
   {{- if and .wrapperValues (not .hasLocalChart) -}}
     {{- fail (printf "argocd-app-loader: app %s has values but no Chart.yaml to take them; the Kustomize form's upstream values live in kustomize/" .name) -}}

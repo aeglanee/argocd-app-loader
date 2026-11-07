@@ -256,17 +256,25 @@ apps/services/nexus/
 The chart's `repo` in `kustomization.yaml` is literal, so `cluster.mirrors` doesn't apply to
 it, and upstream values there aren't templated.
 
-#### Per-app overrides (`cluster.overrides.<app>`)
+#### Per-app overrides (`cluster.overrides.<app>`, in a package `cluster.packages.<package>.overrides.<app>`)
 
 Merged over the app's rendered values file, last: maps merge, lists and scalars are replaced.
-`chart:` goes to the upstream chart as usual. A value that isn't a mapping fails the render.
+`chart:` goes to the upstream chart as usual. A value that isn't a mapping fails the render. In a
+package (see **The root of roots**), an override sits under its package, and one naming an app
+of another package, or none, fails the render.
 
 ```yaml
 cluster:
-  overrides:
+  overrides:            # a single chart
     cilium:
       chart:
         devices: "eth+"
+  packages:             # in a package
+    core:
+      overrides:
+        cilium:
+          chart:
+            devices: "eth+"
 ```
 
 #### Pinned Kubernetes and API versions
@@ -314,8 +322,9 @@ Recognised by the loader:
 
 | Key | Used for |
 |---|---|
-| `apps` | On/off toggles, below |
-| `overrides` | Per-app values merged last — see **Per-app overrides** above |
+| `apps` | On/off toggles in a single chart, below; in a package they sit under `packages.<package>.apps` and the flat key fails the render |
+| `overrides` | Per-app values merged last — see **Per-app overrides** above; in a package under `packages.<package>.overrides` |
+| `packages`, `instancePackages` | What a cluster picks, with its toggles and overrides — see **The root of roots** |
 | `kubeVersion`, `apiVersions` | Pinned on every Helm and Kustomize source — see **Pinned Kubernetes and API versions** |
 | `clusterServer` | Application destination cluster (default `https://kubernetes.default.svc`) |
 | `argocdNamespace` | Where Application/AppProject CRs live (default `argocd`) |
@@ -328,10 +337,9 @@ and `targetRevision` are no longer read: resolve them where `argocdAppLoader.sou
 
 ### App toggles (`.Values.cluster.apps`)
 
-Map of `<app-name>: bool`. Values files can branch on whether peer apps are enabled — e.g.
-enable an OIDC provider in chart X only if `cluster.apps.authentik` is true. Default behavior
-requires explicit `true`; set `.Values.argocdAppLoader.requireToggle: false` to flip this so
-missing entries default to enabled.
+In a single chart: a map of `<app-name>: bool`. Default behavior requires explicit `true`; set
+`.Values.argocdAppLoader.requireToggle: false` to flip this so missing entries default to
+enabled.
 
 ```yaml
 cluster:
@@ -341,6 +349,22 @@ cluster:
     grafana: false
 ```
 
+In a package, `cluster.packages.<package>.apps` lists every app: the catalogue gives each its
+usual value and a cluster's file changes only where it differs (see **The root of roots**). A
+toggle that isn't `true` or `false`, an app listed under two packages, or one its package has no
+folder for fails the render.
+
+#### Lookups for values files
+
+| Helper | `"true"` when | Example |
+|---|---|---|
+| `argocd-app-loader.running` | the app runs here: its package is picked and it is on; in a single chart, its toggle | `{{ if eq (include "argocd-app-loader.running" (dict "Values" .Values "name" "authentik")) "true" }}` |
+| `argocd-app-loader.provided` | an app that runs here lists the name under `provides:` in the dependency list | `{{ ternary "https" "http" (eq (include "argocd-app-loader.provided" (dict "Values" .Values "name" "tls")) "true") }}` |
+
+Both fail on a name no package lists (`running`) or the dependency list doesn't know (`provided`)
+knows, so a typo can't read as "off". A lookup is soft: switching the app off changes the
+values on the next sync instead of failing a render; use `requires:` where the app needs it.
+
 ### Loader configuration (`.Values.argocdAppLoader`)
 
 | Key | Default | Notes |
@@ -349,7 +373,7 @@ cluster:
 | `source.targetRevision` | `HEAD` | |
 | `source.path` | `""` | The chart's folder in that repo; `""` or `.` = the repo root |
 | `appsRoot` | `apps` | Root directory the loader scans, inside the chart; may be nested (`sub/apps`) |
-| `requireToggle` | `true` | If true, apps must be explicitly enabled in `.Values.cluster.apps` |
+| `requireToggle` | `true` | A single chart: if true, apps must be explicitly enabled in `.Values.cluster.apps` |
 
 ### The root of roots (`argocd-app-loader.root`)
 
@@ -371,14 +395,21 @@ copy) and one Application per package the cluster picked. `examples/catalogue` a
 `examples/fleet` show the whole shape.
 
 ```yaml
-# catalogue repo: values.yaml (which packages exist, their order, where they live; defaults)
-argocdAppLoader:
+# catalogue repo: values.yaml (which packages exist, their order, where they live, their apps)
+cluster:
   packages:
     core:
+      enabled: false      # a cluster picks it
       wave: 0             # packages/core in the catalogue repo
+      apps:               # every app of the package: does it run when a cluster picks it?
+        cilium: true
+        trivy: false
     media:
+      enabled: false
       wave: 20            # another repo, resolved through cluster.mirrors (mirror: false opts out)
       repoURL: https://github.com/example/media-package.git   # path defaults to "."
+      apps:
+        jellyfin: true
 ---
 # fleet repo: clusters/demo/values.yaml
 cluster:
@@ -387,14 +418,31 @@ cluster:
   instanceValuesFiles:                                       # later files win
     - clusters/demo/values.yaml
   packages:
-    core: true
+    core:
+      enabled: true
+      apps:               # only where this cluster differs from the package's usual apps
+        trivy: true
+      overrides:          # per-app values, merged last
+        cilium:
+          chart:
+            devices: "eth+"
     media:
-      version: v1.2.0     # a map counts as picked; version (a quoted git ref) is its only key
+      enabled: true
+      version: v1.2.0     # pinned (a quoted git ref)
   instancePackages:
     site:                                                    # in the fleet repo
       path: packages/site
       wave: 30
+      apps:               # its apps, on or off
+        blog: true
 ```
+
+`cluster.packages.<name>` is one map that the catalogue and the cluster's files fill together:
+Helm merges them, later files win, so a cluster writes only what differs (and could change a
+package's `wave` or source, too). A bare `true` in a later file would replace the lower file's
+map, so a package is always a map. An app added to a package with `true` runs on every cluster
+that picks the package from its next sync on; to try it on one cluster first, add it as `false`
+and switch it on there.
 
 | Each Application gets | Value |
 |---|---|
@@ -408,8 +456,14 @@ cluster:
 `cluster.useLocalGit` switches the catalogue and the fleet repo between their `remote…` and
 `local…` URLs. The render fails on:
 
-- a pick the catalogue doesn't have, a pick that is neither a bool nor a map, or a map key other
-  than `version`;
+- a package that isn't a map, one with neither `wave` nor `apps` (a typo'd name), `enabled`
+  that isn't `true` or `false`, or a key other than `enabled`, `wave`, `apps`, `version`,
+  `overrides`, `repoURL`, `path`, `mirror` (an instance package: `path`, `wave`, `version`,
+  `apps`, `overrides`);
+- a package without `apps` (every app would be off), or an app listed under two packages;
+- `argocdAppLoader.packages` (moved to `cluster.packages`), flat `cluster.apps` or
+  `cluster.overrides` (they sit under the package now), or an override naming an app its package
+  doesn't have;
 - picking nothing (the root would prune every app), or an empty `instanceValuesFiles`;
 - a missing `wave`, or a git ref that isn't a string;
 - a catalogue and an instance package sharing a name, or a root named `pkg-…`.
@@ -419,28 +473,28 @@ package syncs on its own, so only its own render can stop it from pruning an app
 
 ### Dependencies (`argocdAppLoader.dependencies`)
 
-Opt-in: an app that isn't listed is never checked. The list sits in values every package reads
-(for a root of roots, the catalogue's `values.yaml`), so each package sees the dependencies of
-apps in other packages too:
+The list sits in values every package reads (for a root of roots, the catalogue's
+`values.yaml`), so each package sees the dependencies of apps in other packages too. An entry
+says what an app requires and provides; with packages, `cluster.packages.<p>.apps` says which
+package the app is in, and every app in it counts as listed, so an entry is only needed for a
+requirement or a capability:
 
 ```yaml
 argocdAppLoader:
   dependencies:
     harbor:
-      package: platform          # the package its app is in; not needed in a single chart
       requires:
-        - cnpg                   # an app's name (it must be listed too)
-        - storage.replicated     # or something a listed app provides
-    cnpg:
-      package: platform
+        - cnpg                   # an app's name
+        - storage.replicated     # or something an app provides
     longhorn:
-      package: core
       provides:
         - storage.replicated
 ```
 
-Every package's render checks its own listed apps. A listed app is on when its toggle is and its
-package is picked (`cluster.packages`, `cluster.instancePackages`). The render fails when:
+In a single chart (no packages), it is opt-in: an app without an entry is never checked.
+
+Every package's render checks its own apps. An app is on when its package is picked
+(`cluster.packages`, `cluster.instancePackages`) and it is on there. The render fails when:
 
 - an app that is on requires something that no app that is on is named or provides;
 - an app that is off is still required, by name or for something only it provides, by an app
@@ -448,17 +502,23 @@ package is picked (`cluster.packages`, `cluster.instancePackages`). The render f
   storage.replicated, which only it provides`. The render failing means nothing is synced, so
   nothing is pruned; once the dependents are off, the removal goes through;
 - a requirement comes later: a later package wave, or inside one package a later app wave;
-- a required name isn't listed (a typo), a package name is unknown, a listed app isn't in the
-  package it names, or an app of this package is listed under another one.
+- a required name isn't known (a typo), an entry names an app no package lists, or an entry
+  still sets `package:` (the package's app list says it now);
+- a package's app list and its folders disagree: an app folder the list doesn't name or puts in
+  another package, a list entry without a folder, or one app in two packages.
 
-A `null` entry drops out, so a cluster's file can remove one the catalogue lists (an app still
-required elsewhere then fails every render). `argocdAppLoader.package` names the package being
-rendered; the root of roots sets it, and checks the whole list too, since switching a package off
-is its decision. `requires:`/`provides:` in an `app.yaml` fail the render: they moved here in 0.9.
+A `null` entry drops its `requires` and `provides`, so a cluster's file can remove what the
+catalogue lists (an app that still needs the capability then fails every render).
+`argocdAppLoader.package` names the package being rendered; the root of roots sets it, and checks
+the whole list too, since switching a package off is its decision. `requires:`/`provides:` in an
+`app.yaml` fail the render: they moved here in 0.9.
 
 Limits: a package pinned to a version checks the list at that version; switching a provider and
 its dependents off in one commit passes, and the packages then prune in parallel, so switch the
-dependents off first; duplicate names of unlisted apps or of groups across packages aren't seen.
+dependents off first; duplicate names of groups across packages aren't seen. A package from
+another repo reads its app list at the catalogue's revision but its folders at its own
+`version`, and the two must name the same apps: clusters can't pin versions of it that differ
+in their apps.
 
 ## Publishing & consuming
 
@@ -512,7 +572,15 @@ A loader change that alters output fails `task check`; see [test/README.md](test
 
 ## Status
 
-Pre-1.0. The API is settling. Pin a version in your dependency. 0.9 breaks 0.8 consumers:
+Pre-1.0. The API is settling. Pin a version in your dependency. The next release breaks 0.9
+consumers of the root of roots: a pick is `{enabled: true}`, toggles and overrides sit under
+their package (`cluster.packages.<package>.apps`, `.overrides`), the catalogue's
+`argocdAppLoader.packages` moves into the same `cluster.packages` map (wave, source, every app
+with its usual on/off), and dependency entries drop `package:`. Values files ask
+`argocd-app-loader.running` instead of reading `cluster.apps`. A single chart without packages
+is unchanged. Move the root chart and every package chart to the new release together, with the
+values: a package still on 0.9 finds no `cluster.apps` and switches all its apps off, and so does
+a package pinned to a tag built on 0.9. 0.9 broke 0.8 consumers:
 `argocdAppLoader.source` replaces `cluster.repoBasePath` and the `useLocalGit` lookup, `cluster:` is
 no longer injected into the apps, and a root of roots is the new `argocd-app-loader.root`, whose
 chart sits in the fleet repo (`argocdAppLoader.rootPath`).

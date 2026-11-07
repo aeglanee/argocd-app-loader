@@ -14,15 +14,18 @@ set:
       - clusters/common.yaml
       - clusters/this.yaml
     packages:
-      a: true
-      b: true
-  argocdAppLoader:
-    rootPath: root
-    packages:
       a:
         wave: 0
+        apps:
+          y: true
+        enabled: true
       b:
         wave: 10
+        apps:
+          x: true
+        enabled: true
+  argocdAppLoader:
+    rootPath: root
 tests:
   - it: emits itself from the instance repo, reading the catalogue's values and then the cluster's
     documentSelector:
@@ -86,15 +89,14 @@ tests:
 
   - it: leaves out a package that isn't picked
     set:
-      cluster.packages.b: false
+      cluster.packages.b.enabled: false
     asserts:
       - hasDocuments:
           count: 2
 
   - it: pins a package and the defaults it reads to its version, quoted
     set:
-      cluster.packages.a:
-        version: "2026.10"
+      cluster.packages.a.version: "2026.10"
     documentSelector:
       path: metadata.name
       value: pkg-a
@@ -109,23 +111,21 @@ tests:
           path: spec.sources[1].targetRevision
           value: "2026.10"
 
-  - it: counts an empty map as picked
+  - it: fails on a pick without enabled
     set:
-      cluster.packages.a: {}
-    documentSelector:
-      path: metadata.name
-      value: pkg-a
+      cluster.packages.c: {}
+      cluster.packages.c.wave: 30
     asserts:
-      - equal:
-          path: spec.sources[0].targetRevision
-          value: HEAD
+      - failedTemplate:
+          errorPattern: "cluster.packages.c.enabled must be true or false, got <nil>"
 
   - it: takes a package from another repo, mirrored, at its own HEAD
     set:
-      argocdAppLoader.packages.ext:
+      cluster.packages.ext:
         wave: 20
         repoURL: https://github.com/someone/ext.git
-      cluster.packages.ext: true
+        apps: {}
+      cluster.packages.ext.enabled: true
       cluster.targetRevision: v1
       cluster.mirrors:
         via:
@@ -161,6 +161,8 @@ tests:
       cluster.instancePackages.site:
         path: packages/site
         wave: 40
+        apps:
+          blog: true
     documentSelector:
       path: metadata.name
       value: pkg-site
@@ -194,7 +196,7 @@ tests:
 
   - it: cleans a package path
     set:
-      argocdAppLoader.packages.b.path: ./pkgs/b/
+      cluster.packages.b.path: ./pkgs/b/
     documentSelector:
       path: metadata.name
       value: pkg-b
@@ -203,32 +205,30 @@ tests:
           path: spec.sources[0].path
           value: pkgs/b
 
-  - it: fails on a pick the catalogue doesn't have
+  - it: fails on a package the catalogue doesn't define, naming the ones it does
     set:
-      cluster.packages.c: true
+      cluster.packages.c.enabled: true
     asserts:
       - failedTemplate:
-          errorPattern: "cluster.packages.c: no such package; the catalogue has a, b"
+          errorPattern: "cluster.packages.c isn't a package the catalogue defines \\(no wave, no apps\\); a typo\\? The packages: a, b"
 
-  - it: fails on a pick that is neither a bool nor a map
+  - it: fails on a pick that isn't a map, even a bare true, which would replace a lower file's map
     set:
-      cluster.packages.a: "yes"
+      cluster.packages.a: true
     asserts:
       - failedTemplate:
-          errorPattern: "cluster.packages.a must be true, false or \\{version: <git ref>\\}, got yes \\(a string\\)"
+          errorPattern: "cluster.packages.a must be a map, \\{enabled: true\\} or \\{enabled: false\\}, got true \\(a bool\\)"
 
   - it: fails on a typo inside a pick
     set:
-      cluster.packages.a:
-        verison: v1
+      cluster.packages.a.verison: v1
     asserts:
       - failedTemplate:
-          errorPattern: "cluster.packages.a.verison: a pick only takes version"
+          errorPattern: "cluster.packages.a.verison: a package takes enabled, version, apps, overrides, wave, repoURL, path, mirror"
 
   - it: fails on an unquoted version
     set:
-      cluster.packages.a:
-        version: 1.10
+      cluster.packages.a.version: 1.10
     asserts:
       - failedTemplate:
           errorPattern: "cluster.packages.a.version must be a string, so quote it \\(got 1.1, which YAML reads as a float64\\)"
@@ -236,8 +236,10 @@ tests:
   - it: fails when nothing is picked
     set:
       cluster.packages:
-        a: false
-        b: false
+        a:
+          enabled: false
+        b:
+          enabled: false
     asserts:
       - failedTemplate:
           errorPattern: "picks no package"
@@ -268,6 +270,7 @@ tests:
       cluster.instancePackages.a:
         path: x
         wave: 1
+        apps: {}
     asserts:
       - failedTemplate:
           errorPattern: "a catalogue package and an instance package would both be Application/pkg-a"
@@ -284,15 +287,9 @@ tests:
     set:
       argocdAppLoader.dependencies:
         x:
-          package: b
           requires:
             - y
-        y:
-          package: a
-      cluster.apps:
-        x: true
-        y: true
-      cluster.packages.a: false
+      cluster.packages.a.enabled: false
     asserts:
       - failedTemplate:
           errorPattern: "x requires y, but nothing that is on provides it \\(off: y \\(package a isn't picked\\)\\)"
@@ -301,23 +298,73 @@ tests:
     set:
       argocdAppLoader.dependencies:
         x:
-          package: b
           requires:
             - y
-        y:
-          package: a
-      cluster.apps:
-        x: true
-        y: true
     asserts:
       - notFailedTemplate: {}
 
-  - it: requires package in the root's check too, or an entry would count as always picked
+  - it: fails on a dependency entry no package lists
     set:
       argocdAppLoader.dependencies:
-        y:
+        z:
           requires: []
-      cluster.apps.y: true
     asserts:
       - failedTemplate:
-          errorPattern: "dependencies.y needs package:"
+          errorPattern: "dependencies.z: no package lists app z"
+
+  - it: checks every package's app list, so a misplaced toggle fails before any package syncs
+    set:
+      cluster.packages.a.apps.x: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "app x is listed under two packages, a and b"
+
+  - it: fails on a package without its apps, which would switch every app off
+    set:
+      cluster.packages.b.apps: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.packages.b.apps is required"
+
+  - it: fails on a misspelt key of an instance package
+    set:
+      cluster.instancePackages.site:
+        path: packages/site
+        wave: 40
+        apps: {}
+        overides: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.instancePackages.site.overides: an instance package takes path, wave, version, apps, overrides"
+
+  - it: names an instance package's own key in its toggle errors, and lets a later file drop a toggle with null
+    set:
+      cluster.instancePackages.site:
+        path: packages/site
+        wave: 40
+        apps:
+          blog: true
+          gone: null
+        overrides:
+          x:
+            replicas: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.instancePackages.site.overrides.x: x is in package b"
+
+  - it: fails on the old package list, which moved into cluster.packages
+    set:
+      argocdAppLoader.packages:
+        a:
+          wave: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "argocdAppLoader.packages moved to cluster.packages"
+
+  - it: fails on flat toggles, which would do nothing with packages
+    set:
+      cluster.apps:
+        x: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "cluster.apps: with packages, set cluster.packages.<package>.apps"

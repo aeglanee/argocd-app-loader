@@ -1,0 +1,15 @@
+{{- /* The lookups values files use, for packages_test.yaml: lookupTest.running lists apps, lookupTest.provided capabilities. */ -}}
+{{- with .Values.lookupTest }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lookups
+data:
+  {{- range $app := default list .running }}
+  running-{{ $app }}: {{ include "argocd-app-loader.running" (dict "Values" $.Values "name" $app) | quote }}
+  {{- end }}
+  {{- range $capability := default list .provided }}
+  provided-{{ $capability }}: {{ include "argocd-app-loader.provided" (dict "Values" $.Values "name" $capability) | quote }}
+  {{- end }}
+{{- end }}

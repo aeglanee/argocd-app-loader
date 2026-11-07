@@ -15,17 +15,22 @@
   root chart's own values.yaml. It reads the catalogue's values.yaml (package list and
   defaults) and the instance's files, in that order, and so does every package.
 
-  Catalogue (its values.yaml):
-    argocdAppLoader.packages.<name>:
+  Packages: cluster.packages.<name>, one map the catalogue (its values.yaml) and the cluster's
+  files fill together (Helm merges them; later files win):
+      enabled     required, true or false: the cluster picks the package (catalogue: false)
       wave        required: a package waits until every package with a lower wave is healthy
+      apps        required: every app of the package, each true or false (the catalogue's usual
+                  value; a cluster's file changes only where it differs)
+      version     optional: a git ref (quoted) to pin it to
+      overrides   optional: per-app values, merged last (maps merge, lists and scalars replace)
       repoURL     optional: another git repo, resolved through cluster.mirrors; default the
                   catalogue repo
       path        optional: the package chart's folder; default packages/<name> in the catalogue,
                   "." elsewhere
       mirror      optional: false keeps repoURL off cluster.mirrors
   Instance (the cluster's values):
-    cluster.packages.<name>: true | false | {version: "<git ref>"}   a map counts as picked
-    cluster.instancePackages.<name>: {path, wave, version}            packages in the instance repo
+    cluster.instancePackages.<name>: {path, wave, version, apps, overrides}   in the instance repo;
+                  apps lists every app with its on/off
     cluster.instanceValuesFiles: [...]   the instance repo's value files, later ones win
   Repos: cluster.remoteGitRepo/localGitRepo (the catalogue) and cluster.instanceRemoteRepo/
   instanceLocalRepo (this repo), switched by cluster.useLocalGit; cluster.targetRevision (the
@@ -63,27 +68,50 @@
     "valueFiles" $valueFiles "refs" (list $catalogueRef $valuesRef)) }}
 
 {{- /*
-  Picks. A typo'd or non-bool pick would silently drop a package, and with it, through prune and
-  the resources finalizer, every app in it. Picking nothing would do that to the whole cluster.
+  Picks. A typo'd pick, or one that isn't a map with enabled, would silently drop a package, and
+  with it, through prune and the resources finalizer, every app in it. Picking nothing would do
+  that to the whole cluster, and so would a package list without its apps (every app off).
 */ -}}
-{{- $catalogued := default dict (default dict .Values.argocdAppLoader).packages -}}
+{{- if (default dict .Values.argocdAppLoader).packages -}}
+  {{- fail "argocd-app-loader: argocdAppLoader.packages moved to cluster.packages: each package's wave, source and apps sit beside enabled (README)" -}}
+{{- end -}}
+{{- $catalogued := default dict $c.packages -}}
 {{- $instancePackages := default dict $c.instancePackages -}}
 {{- $on := dict -}}
-{{- range $name, $pick := default dict $c.packages -}}
-  {{- if not (hasKey $catalogued $name) -}}
-    {{- fail (printf "argocd-app-loader: cluster.packages.%s: no such package; the catalogue has %s" $name (keys $catalogued | sortAlpha | join ", ")) -}}
+{{- include "argocd-app-loader.noFlatToggles" $c -}}
+{{- $known := list -}}
+{{- range $name, $p := $catalogued }}{{ if and (kindIs "map" $p) (hasKey $p "wave") }}{{ $known = append $known $name }}{{ end }}{{ end -}}
+{{- range $name, $p := $catalogued -}}
+  {{- /* A bare true over a lower file's map would replace that map, and its apps and overrides. */ -}}
+  {{- if not (kindIs "map" $p) -}}
+    {{- fail (printf "argocd-app-loader: cluster.packages.%s must be a map, {enabled: true} or {enabled: false}, got %v (a %s)" $name $p (kindOf $p)) -}}
   {{- end -}}
-  {{- if kindIs "map" $pick -}}
-    {{- range $k := keys $pick -}}
-      {{- if ne $k "version" -}}
-        {{- fail (printf "argocd-app-loader: cluster.packages.%s.%s: a pick only takes version" $name $k) -}}
-      {{- end -}}
+  {{- if not (or (hasKey $p "wave") (hasKey $p "apps")) -}}
+    {{- fail (printf "argocd-app-loader: cluster.packages.%s isn't a package the catalogue defines (no wave, no apps); a typo? The packages: %s" $name (join ", " (sortAlpha $known))) -}}
+  {{- end -}}
+  {{- range $k := keys $p -}}
+    {{- if not (has $k (list "enabled" "version" "apps" "overrides" "wave" "repoURL" "path" "mirror")) -}}
+      {{- fail (printf "argocd-app-loader: cluster.packages.%s.%s: a package takes enabled, version, apps, overrides, wave, repoURL, path, mirror" $name $k) -}}
     {{- end -}}
-    {{- $_ := set $on $name (include "argocd-app-loader.gitRef" (dict "ref" $pick.version "default" "" "key" (printf "cluster.packages.%s.version" $name))) -}}
-  {{- else if not (kindIs "bool" $pick) -}}
-    {{- fail (printf "argocd-app-loader: cluster.packages.%s must be true, false or {version: <git ref>}, got %v (a %s)" $name $pick (kindOf $pick)) -}}
-  {{- else if $pick -}}
-    {{- $_ := set $on $name "" -}}
+  {{- end -}}
+  {{- if not (kindIs "bool" $p.enabled) -}}
+    {{- fail (printf "argocd-app-loader: cluster.packages.%s.enabled must be true or false, got %v" $name $p.enabled) -}}
+  {{- end -}}
+  {{- if not (kindIs "map" $p.apps) -}}
+    {{- fail (printf "argocd-app-loader: cluster.packages.%s.apps is required: every app of the package, true or false" $name) -}}
+  {{- end -}}
+  {{- if $p.enabled -}}
+    {{- $_ := set $on $name (include "argocd-app-loader.gitRef" (dict "ref" $p.version "default" "" "key" (printf "cluster.packages.%s.version" $name))) -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $p := $instancePackages -}}
+  {{- range $k := keys (default dict $p) -}}
+    {{- if not (has $k (list "path" "wave" "version" "apps" "overrides")) -}}
+      {{- fail (printf "argocd-app-loader: cluster.instancePackages.%s.%s: an instance package takes path, wave, version, apps, overrides" $name $k) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if not (kindIs "map" (default dict $p).apps) -}}
+    {{- fail (printf "argocd-app-loader: cluster.instancePackages.%s.apps is required: every app of the package, true or false" $name) -}}
   {{- end -}}
 {{- end -}}
 {{- if not (or $on $instancePackages) -}}
@@ -104,7 +132,7 @@
 {{- /* Catalogue packages: in the catalogue repo, or another. */ -}}
 {{- range $name := keys $catalogued | sortAlpha }}
   {{- $p := default dict (get $catalogued $name) -}}
-  {{- $wave := required (printf "argocd-app-loader: argocdAppLoader.packages.%s.wave is required" $name) $p.wave -}}
+  {{- $wave := required (printf "argocd-app-loader: cluster.packages.%s.wave is required" $name) $p.wave -}}
   {{- if hasKey $on $name }}
     {{- $version := get $on $name -}}
     {{- $repoURL := $catalogue -}}
