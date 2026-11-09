@@ -9,7 +9,7 @@ change.
 |---|---|---|
 | `examples/consumer` | `golden/example.yaml` | a single chart (no packages) |
 | `examples/fleet/root` + `examples/catalogue/values.yaml` + `examples/fleet/clusters/demo/values.yaml` | `golden/fleet.yaml` | a root of roots: packages in the catalogue, in another repo, in the fleet repo |
-| `examples/catalogue/packages/core` | `golden/catalogue-core.yaml` | one of the catalogue's packages, as its Application renders it |
+| `examples/catalogue/packages/core` + `examples/catalogue/values.yaml` + `examples/fleet/clusters/demo/values.yaml` | `golden/catalogue-core.yaml` | one of the catalogue's packages, as its Application renders it (`argocdAppLoader.source` and `package` set as the root would) |
 
 Each example is small and shows one shape; the unit tests pin single behaviours, one fixture app
 each.
@@ -18,7 +18,9 @@ each.
 
 `task unit` runs the [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites in
 `unit/tests/`. A library chart can't be tested on its own, so `unit/` is a consumer whose fixture
-apps sit under `unit/apps/unit/`, each switched on only by the tests that need it. Golden renders
+apps sit under `unit/apps/unit/`, each switched on only by the tests that need it; the group and
+`appsRoot` tests use roots of their own beside it (`grouped`, `groups`, `groups-typo`,
+`invalid-groups`, `nested/apps`, `nested2/apps`). Golden renders
 show what changed; unit tests pin behaviour the goldens can't show, such as a render that must fail.
 
 ## Schema check

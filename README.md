@@ -37,10 +37,10 @@ apps/
 - Walks `apps/<group>/_group.yaml` and emits one `AppProject` per group.
 - Auto-derives the project name from the group folder, and the repo and `path:` of
   the app's own files from `argocdAppLoader.source` plus the app folder.
-- **Tpl-renders each wrapper's `values.yaml`** against the consumer chart
-  context, so `{{ .Values.cluster.* }}` references inside per-app values
-  resolve correctly. Helm itself does not tpl values files; this is the
-  loader's job.
+- **Tpl-renders each wrapper's values file** against the consumer chart context, so
+  `{{ .Values.cluster.* }}` references inside per-app values resolve correctly: `values.yaml.gotmpl`,
+  else `values.yaml` (when both exist, only `.gotmpl` is read). Prefer `.gotmpl`: Helm loads a
+  wrapper's plain `values.yaml` as its defaults too, untemplated.
 - Passes the rendered values to the app via `helm.valuesObject`, and nothing else: a wrapper's
   templates see only what its values file passes, so a change to one cluster value re-syncs
   only the apps whose values use it.
@@ -125,25 +125,28 @@ description: "CNI, storage, ingress, certificates"
 
 ### `app.yaml` (per-app metadata)
 
-Only the fields below are read; anything else in `app.yaml` is ignored.
+Only the fields below are read; anything else in `app.yaml` is ignored, except `requires:` and
+`provides:`, which fail the render (they moved to the dependency list).
 
 | Field | Required | Default | Notes |
 |---|---|---|---|
 | `wave` | no | `0` | Mapped to `argocd.argoproj.io/sync-wave` annotation |
 | `namespace` | no | app folder name | Application destination namespace |
-| `project` | no | group folder name | AppProject reference |
+| `project` | no | `_group.yaml`'s `project`, else the group folder name | AppProject reference, templated against the consumer's values. The loader emits the group's AppProject under the folder name only, so a different name must exist elsewhere |
 | `releaseName` | no | app folder name | Helm release name |
-| `repoURL` | no | `argocdAppLoader.source.repoURL` | Another repo for this app (resolved through `cluster.mirrors`); needs `path:`, and can't sit beside a `Chart.yaml` |
+| `repoURL` | no | `argocdAppLoader.source.repoURL` | Another repo for this app (resolved through `cluster.mirrors`); needs `path:`, and can't sit beside a `Chart.yaml`. Ignored next to `chart:` or `sources:`; with `kustomize/` it isn't supported |
+| `mirror` | no | `true` | With `repoURL:`: `false` reads that URL as written instead of through `cluster.mirrors` |
 | `targetRevision` | no | `argocdAppLoader.source.targetRevision`, else `HEAD`; with `repoURL:`, `HEAD` | |
 | `path` | no | `<source.path>/<appsRoot>/<group>/<name>` | Override the source path |
 | `chart` | no | – | Upstream chart (`repo`, `name`/`path`, `version`, `mirror`) → multisource Application; see **Chart source** below |
 | `createNamespace` | no | `false` | Adds `CreateNamespace=true` to syncOptions |
 | `syncOptions` | no | `[]` | Extra sync options |
 | `syncPolicy` | no | (see below) | Replaces the default policy as written, so `createNamespace` and `syncOptions` no longer apply (put `syncOptions` inside it); `{}` means sync by hand |
-| `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps) |
-| `helm` | no | – | Extra `helm` block fields for the auto-built source; they win over the pinned `kubeVersion`/`apiVersions` |
+| `sources` | no | – | If set, replaces the auto-built `source` block (multi-source apps); ignored next to `chart:` |
+| `helm` | no | – | Extra `helm` block fields for the auto-built source; they win over the pinned `kubeVersion`/`apiVersions`. In the `chart:` form they reach the upstream source only. Don't set `releaseName` or `valuesObject` here: the loader writes them too, and the key would appear twice |
 | `finalizers` | no | `[resources-finalizer.argocd.argoproj.io]` | With the default, deleting the Application deletes its resources; `[]` keeps them (e.g. CRDs). Missing or null gets the default |
-| `annotations`, `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | – | Copied onto the Application (`revisionHistoryLimit: 0` included); the sync-wave annotation is always added |
+| `annotations` | no | – | Onto the Application, each value templated against the consumer's values; the sync-wave annotation is always added |
+| `labels`, `ignoreDifferences`, `info`, `revisionHistoryLimit` | no | – | Copied onto the Application (`revisionHistoryLimit: 0` included) |
 
 > **Caveat — `sources` bypasses the values file.** The tpl-rendered wrapper values reach
 > only the auto-built sources. If you declare `sources:`, they're emitted verbatim and you
@@ -152,13 +155,14 @@ Only the fields below are read; anything else in `app.yaml` is ignored.
 > single-source wrapper with multiple `Chart.yaml` dependencies covers most "combine
 > charts" needs without this.
 >
-> **One exception: `repoURL` is resolved, not copied.** Each entry's `repoURL` goes
-> through the same `cluster.mirrors` lookup as `chart.repo` (an entry with `chart:` is
-> treated as a Helm source — OCI if `oci://` or scheme-less, else HTTP; anything else as
-> git), and a per-entry `mirror: false` is consumed as the opt-out (not emitted).
+> **Three exceptions to verbatim.** Each entry's `repoURL` is templated and goes through
+> the same `cluster.mirrors` lookup as `chart.repo` (an entry with `chart:` is treated as
+> a Helm source — OCI if `oci://` or scheme-less, else HTTP; anything else as git), and a
+> per-entry `mirror: false` is consumed as the opt-out (not emitted). An entry with
+> `chart:` or `helm:` gets the pinned `kubeVersion`/`apiVersions` merged into its `helm:`.
 > Everything else is verbatim. This matters for apps that are **not a Helm chart at
 > all** — raw upstream YAML such as the Gateway API CRDs. A `repoURL` with no table
-> entry is returned **exactly as written**.
+> entry is returned as written; an OCI one without `oci://` and a trailing `/`.
 
 <!-- -->
 
@@ -189,8 +193,9 @@ One field names the **real upstream**; the type is inferred from it, strictly:
 | `https://…` | `name`, `version` | HTTP Helm repo | `repoURL` as written + `chart` |
 | `https://…` | `path`, `version` (git ref) | chart in a git repo | `repoURL` as written + `path` |
 
-Missing `repo`/`version`, a scheme-less `repo`, `path` on OCI, `name` on git, or a pre-0.8
-key (`oci`/`http`/`git`/`revision`) fails the render with a message saying what to fix.
+Missing `repo`/`version`, a missing `name` on OCI or HTTP, a scheme-less `repo`, `path` on OCI,
+`name` on git, or a pre-0.8 key (`oci`/`http`/`git`/`revision`) fails the render with a message
+saying what to fix.
 
 ```yaml
 chart: { repo: oci://ghcr.io/acme/charts, name: myapp, version: "1.2.3" }        # OCI registry
@@ -300,11 +305,15 @@ Every AppProject gets a sync-wave one below the first app that is on (at most `-
 project doesn't exist yet is never reconciled, so with an Application health check its wave would
 never finish. The loader renders the fields below; other `AppProject` spec fields are ignored. A field
 that is present is rendered as written, even when empty: `sourceRepos: []` allows nothing.
-Only a missing or null field (`sourceRepos:` with nothing under it) gets the default.
+Only a missing or null field (`sourceRepos:` with nothing under it) gets the default, and an empty
+`description`. Every group needs a `_group.yaml`, empty is fine: without one, its apps reference an
+AppProject the loader never emits.
 
 | Field | Default | Notes |
 |---|---|---|
 | `description` | group folder name | UI label |
+| `project` | group folder name | The default project of the group's apps; the AppProject itself keeps the folder name |
+| `annotations`, `labels` | – | Onto the AppProject, not templated; an `argocd.argoproj.io/sync-wave` here replaces the computed wave |
 | `sourceRepos` | `["*"]` | Whitelist of repos apps in this project may pull from |
 | `destinations` | `[{namespace: "*", server: "*"}]` | Whitelist of `{server, namespace}` pairs |
 | `clusterResourceWhitelist` | `[{group: "*", kind: "*"}]` | Allowed cluster-scoped resources |
@@ -335,7 +344,9 @@ and `targetRevision` are no longer read by the loader (the root of roots reads t
 
 ### App toggles (`.Values.cluster.apps`)
 
-In a single chart: a map of `<app-name>: bool`. Default behavior requires explicit `true`; set
+In a single chart: a map of `<app-name>: bool`. Default behavior requires a toggle: an app without
+one is off. A toggle that isn't a boolean counts as on whenever it isn't empty (a quoted `"false"`
+too); in a package, anything but `true` or `false` fails the render. Set
 `.Values.argocdAppLoader.requireToggle: false` to flip this so missing entries default to
 enabled.
 
@@ -372,6 +383,11 @@ values on the next sync instead of failing a render; use `requires:` where the a
 | `source.path` | `""` | The chart's folder in that repo; `""` or `.` = the repo root |
 | `appsRoot` | `apps` | Root directory the loader scans, inside the chart; may be nested (`sub/apps`) |
 | `requireToggle` | `true` | A single chart: if true, apps must be explicitly enabled in `.Values.cluster.apps` |
+| `rootPath` | – | The root of roots: its chart's folder in the fleet repo, required — see **The root of roots** |
+| `package`, `rootName` | – | Set by the root on each package: its own name and the root's — see **The root of roots** |
+| `dependencies` | – | What apps require and provide — see **Dependencies** |
+
+`argocdAppLoader.packages` fails the render: packages moved to `cluster.packages` in 0.10.
 
 ### The root of roots (`argocd-app-loader.root`)
 
@@ -446,13 +462,23 @@ and switch it on there.
 |---|---|
 | values | the catalogue's `values.yaml` (through the `catalogue` ref; for a catalogue package at the package's own revision), then each instance values file, in order |
 | sync-wave (packages) | its `wave`: a package waits until every lower wave is healthy (with an Application health check in `argocd-cm`) |
-| source | the root: the fleet repo at `rootPath`; a package: the catalogue at `packages/<name>`, another repo at `path`, or the fleet repo for instance packages; at `version`, else that repo's revision (`cluster.targetRevision`, another repo's `HEAD`, `cluster.instanceRevision`) |
+| source | the root: the fleet repo at `rootPath`; a package: the catalogue at `path` (default `packages/<name>`), another repo at `path`, or the fleet repo for instance packages; at `version`, else that repo's revision (`cluster.targetRevision`, another repo's `HEAD`, `cluster.instanceRevision`) |
+| project, sync policy | `default`; automated with prune and self-heal, `ServerSideApply=true`; the root also `Prune=false` (it never deletes itself) and `CreateNamespace=true` |
 | `argocdAppLoader.source` (packages) | where its own files are, for its apps' local charts |
 | name (packages) | `pkg-<name>`, so no package can share a name with an app; the loader fails an app named `pkg-…` or like the root |
 | `argocdAppLoader.package`, `rootName` (packages) | its own name, for the dependency list, and the root's |
 
-`cluster.useLocalGit` switches the catalogue and the fleet repo between their `remote…` and
-`local…` URLs. The render fails on:
+The root reads these `cluster` keys, besides the packages:
+
+| Key | Required | Default | Notes |
+|---|---|---|---|
+| `remoteGitRepo`, `localGitRepo` | the one `useLocalGit` picks | – | The catalogue |
+| `instanceRemoteRepo`, `instanceLocalRepo` | the one `useLocalGit` picks | – | The fleet repo |
+| `useLocalGit` | no | `false` | Switches both repos between their `remote…` and `local…` URLs |
+| `targetRevision`, `instanceRevision` | no | `HEAD` | The catalogue's and the fleet repo's revision |
+| `instanceValuesFiles` | yes | – | The cluster's values files in the fleet repo, later ones win |
+
+The render fails on:
 
 - a package that isn't a map, one with neither `wave` nor `apps` (a typo'd name), `enabled`
   that isn't `true` or `false`, or a key other than `enabled`, `wave`, `apps`, `version`,
@@ -462,7 +488,8 @@ and switch it on there.
 - `argocdAppLoader.packages` (moved to `cluster.packages`), flat `cluster.apps` or
   `cluster.overrides` (they sit under the package now), or an override naming an app its package
   doesn't have;
-- picking nothing (the root would prune every app), or an empty `instanceValuesFiles`;
+- picking nothing (the root would prune every app), a missing or empty `instanceValuesFiles`,
+  a missing `argocdAppLoader.rootPath` or repo URL, or an instance package without `path`;
 - a missing `wave`, or a git ref that isn't a string;
 - a catalogue and an instance package sharing a name, or a root named `pkg-…`.
 
@@ -489,7 +516,8 @@ argocdAppLoader:
         - storage.replicated
 ```
 
-In a single chart (no packages), it is opt-in: an app without an entry is never checked.
+In a single chart (no packages), it is opt-in: an app without an entry is never checked, and an
+entry naming an app the chart has no folder for fails the render.
 
 Every package's render checks its own apps. An app is on when its package is picked
 (`cluster.packages`, `cluster.instancePackages`) and it is on there. The render fails when:
@@ -548,8 +576,9 @@ from one of:
 ## Development
 
 Tools: [Helm 4](https://helm.sh/docs/intro/install/) (Argo CD 3.5+ renders with Helm 4) with the
-[helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin, [Task](https://taskfile.dev/)
-and [pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all of them.
+[helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin,
+[kubeconform](https://github.com/yannh/kubeconform), [Task](https://taskfile.dev/) and
+[pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all of them.
 
 ```sh
 nix develop -c pre-commit install   # once; hooks then run on every commit

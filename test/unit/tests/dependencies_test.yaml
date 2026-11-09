@@ -32,6 +32,7 @@ set:
           external: false
           external-chart: false
           external-nopath: false
+          external-unmirrored: false
           finalizers-string: false
           history-zero: false
           invalid-app-yaml: false

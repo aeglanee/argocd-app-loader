@@ -117,6 +117,40 @@ tests:
           path: spec.syncPolicy
           value: {}
 
+  - it: reads another repo through cluster.mirrors
+    set:
+      cluster.apps.external: true
+      cluster.mirrors:
+        via:
+          forgejo:
+            enabled: true
+            base: http://forgejo.local/mirrors
+        table:
+          git.example.com/other:
+            via: forgejo
+            repo: other
+    asserts:
+      - equal:
+          path: spec.source.repoURL
+          value: http://forgejo.local/mirrors/other
+
+  - it: reads another repo as written with mirror false
+    set:
+      cluster.apps.external-unmirrored: true
+      cluster.mirrors:
+        via:
+          forgejo:
+            enabled: true
+            base: http://forgejo.local/mirrors
+        table:
+          git.example.com/other:
+            via: forgejo
+            repo: other
+    asserts:
+      - equal:
+          path: spec.source.repoURL
+          value: https://git.example.com/other.git
+
   - it: passes an app's releaseName, ignoreDifferences, info and syncPolicy through
     set:
       cluster.apps.passthrough: true
