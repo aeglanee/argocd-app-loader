@@ -3,15 +3,17 @@
 # consumers' charts/*.tgz, so the tarballs nest inside each other and grow on every run until Helm
 # refuses them.
 .git
+.githooks/
 .github/
 .gitignore
 .helmignore
 .markdownlint.yaml
-.pre-commit-config.yaml
+.release-please-manifest.json
 .yamllint
+CHANGELOG.md
 examples/
-flake.lock
-flake.nix
-Taskfile.yml
+makefile
+release-please-config.json
 test/
+tools.mk
 *.tgz

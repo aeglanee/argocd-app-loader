@@ -1,0 +1,12 @@
+---
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  conventional:
+    uses: sessrumnir/shared-workflows/.github/workflows/pr-title.yml@95241ca8cfbbd8236bff5f42db0760d237f03b39 # v0.26.0

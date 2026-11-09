@@ -10,6 +10,8 @@ ignore: |
   examples/consumer/charts/
   # Deliberately broken, for the unit tests that expect the render to fail.
   test/unit/**/invalid-*/
+  # Generated: Helm's output, compared byte for byte.
+  test/golden/
 
 rules:
   line-length:

@@ -67,7 +67,7 @@ type: application
 version: 0.1.0
 dependencies:
   - name: argocd-app-loader
-    version: "0.10.0"
+    version: "0.10.0" # x-release-please-version
     repository: "oci://ghcr.io/aeglanee/charts"
     # Or, for a local checkout during library development:
     # repository: "file://../../argocd-app-loader"
@@ -575,17 +575,21 @@ from one of:
 
 ## Development
 
-Tools: [Helm 4](https://helm.sh/docs/intro/install/) (Argo CD 3.5+ renders with Helm 4) with the
-[helm-unittest](https://github.com/helm-unittest/helm-unittest) plugin,
-[kubeconform](https://github.com/yannh/kubeconform), [Task](https://taskfile.dev/) and
-[pre-commit](https://pre-commit.com/). With Nix, `nix develop` provides all of them.
+Every tool runs in its own container (Docker, no network), pinned in `tools.mk`: Helm 4 with the
+helm-unittest plugin and kubeconform (Argo CD 3.5+ renders with Helm 4), and the linters. `make lint`
+checks files, workflows, secrets, the Renovate config, Markdown and YAML; `make check` lints the
+chart, runs the unit tests, renders the golden files and validates them, as CI does; `make hooks`
+runs `make lint check` before every push.
 
 ```sh
-nix develop -c pre-commit install   # once; hooks then run on every commit
-nix develop -c task check           # lint, unit tests, golden renders, schema check: as CI runs them
+make lint check
+make golden   # after a deliberate change: render the golden files again, then review the diff
 ```
 
-A loader change that alters output fails `task check`; see [test/README.md](test/README.md).
+A loader change that alters output fails `make check`; see [test/README.md](test/README.md).
+Releases: Release Please keeps a release pull request open on `main`, with the next version in
+`Chart.yaml` and `CHANGELOG.md` written from the commit titles (Conventional Commits); merging it
+tags the release and publishes the chart.
 
 ## Status
 
