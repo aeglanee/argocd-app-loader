@@ -155,8 +155,9 @@ Only the fields below are read; anything else in `app.yaml` is ignored, except `
 > single-source wrapper with multiple `Chart.yaml` dependencies covers most "combine
 > charts" needs without this.
 >
-> **Three exceptions to verbatim.** Each entry's `repoURL` is templated and goes through
-> the same `cluster.mirrors` lookup as `chart.repo` (an entry with `chart:` is treated as
+> **Three exceptions to verbatim.** Each entry's `repoURL` goes through the same
+> `cluster.mirrors` lookup as `chart.repo` (on the URL as written, before templating; the result
+> is then templated) (an entry with `chart:` is treated as
 > a Helm source — OCI if `oci://` or scheme-less, else HTTP; anything else as git), and a
 > per-entry `mirror: false` is consumed as the opt-out (not emitted). An entry with
 > `chart:` or `helm:` gets the pinned `kubeVersion`/`apiVersions` merged into its `helm:`.
@@ -387,7 +388,8 @@ values on the next sync instead of failing a render; use `requires:` where the a
 | `package`, `rootName` | – | Set by the root on each package: its own name and the root's — see **The root of roots** |
 | `dependencies` | – | What apps require and provide — see **Dependencies** |
 
-`argocdAppLoader.packages` fails the render: packages moved to `cluster.packages` in 0.10.
+In the root of roots, `argocdAppLoader.packages` fails the render: packages moved to
+`cluster.packages` in 0.10.
 
 ### The root of roots (`argocd-app-loader.root`)
 
@@ -558,15 +560,15 @@ from one of:
   ```yaml
   dependencies:
     - name: argocd-app-loader
-      version: "0.10.0"
+      version: "0.10.0" # x-release-please-version
       repository: "oci://ghcr.io/<owner>/charts"
   ```
 
   Publish from CI with
   `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`. Argo CD supports
   OCI Helm repos natively. This repo's [release.yml](.github/workflows/release.yml)
-  does it for a `v*` tag: CI again, then a push that waits for approval in the
-  `release` environment and refuses a version ghcr already has.
+  does it when the release pull request is merged (see **Development**): the checks again,
+  then a push that refuses a version ghcr already has.
 
 - **Local filesystem** (`file://`): only useful when iterating on the
   library and a consumer side-by-side in the same checkout. Not portable.

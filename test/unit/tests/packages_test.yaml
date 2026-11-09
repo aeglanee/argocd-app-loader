@@ -40,6 +40,7 @@ set:
           manual-sync: false
           no-finalizers: false
           null-finalizers: false
+          oci-chart: false
           old-requires: false
           passthrough: false
           plain: true

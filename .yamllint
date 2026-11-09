@@ -21,7 +21,7 @@ rules:
     min-spaces-from-content: 1
   comments-indentation: false
   # Block style only: `{ a: b }` mappings are harder to read and diff. Empty `{}` stays allowed.
-  # Helm templates are ignored above; the `no-flow-mappings` pre-commit hook covers them.
+  # Helm templates are ignored above; `make yaml` checks them for flow mappings.
   braces:
     forbid: non-empty
   document-start: disable

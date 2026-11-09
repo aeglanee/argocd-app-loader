@@ -151,6 +151,105 @@ tests:
           path: spec.source.repoURL
           value: https://git.example.com/other.git
 
+  - it: pulls an OCI chart through its Harbor proxy project
+    set:
+      cluster.apps.oci-chart: true
+      cluster.mirrors:
+        via:
+          harbor:
+            enabled: true
+            host: harbor.example.com
+          shim:
+            enabled: true
+            project: shim-proxy
+          forgejo:
+            enabled: true
+            base: http://forgejo.local/mirrors
+        table:
+          ghcr.io:
+            via: harbor
+            project: ghcr-proxy
+          charts.example.com:
+            via: shim
+          git.example.com/other:
+            via: forgejo
+            repo: other
+    asserts:
+      - equal:
+          path: spec.sources[0].repoURL
+          value: harbor.example.com/ghcr-proxy/acme/charts
+      - equal:
+          path: spec.sources[0].chart
+          value: upstream
+
+  - it: pulls an HTTP chart through the shim, on Harbor's host by default
+    set:
+      cluster.apps.wrapped: true
+      cluster.mirrors:
+        via:
+          harbor:
+            enabled: true
+            host: harbor.example.com
+          shim:
+            enabled: true
+            project: shim-proxy
+          forgejo:
+            enabled: true
+            base: http://forgejo.local/mirrors
+        table:
+          ghcr.io:
+            via: harbor
+            project: ghcr-proxy
+          charts.example.com:
+            via: shim
+          git.example.com/other:
+            via: forgejo
+            repo: other
+    asserts:
+      - equal:
+          path: spec.sources[0].repoURL
+          value: harbor.example.com/shim-proxy/charts.example.com
+
+  - it: mirrors each sources entry by its kind
+    set:
+      cluster.apps.verbatim: true
+      cluster.mirrors:
+        via:
+          harbor:
+            enabled: true
+            host: harbor.example.com
+          shim:
+            enabled: true
+            project: shim-proxy
+          forgejo:
+            enabled: true
+            base: http://forgejo.local/mirrors
+        table:
+          ghcr.io:
+            via: harbor
+            project: ghcr-proxy
+          charts.example.com:
+            via: shim
+          git.example.com/other:
+            via: forgejo
+            repo: other
+    asserts:
+      - equal:
+          path: spec.sources[0].repoURL
+          value: harbor.example.com/shim-proxy/charts.example.com
+      - equal:
+          path: spec.sources[1].repoURL
+          value: http://forgejo.local/mirrors/other
+
+  - it: renders argocdAppLoader.source.repoURL as a template
+    set:
+      cluster.apps.plain: true
+      argocdAppLoader.source.repoURL: "https://git.{{ .Values.cluster.domain }}/unit.git"
+    asserts:
+      - equal:
+          path: spec.source.repoURL
+          value: https://git.example.com/unit.git
+
   - it: passes an app's releaseName, ignoreDifferences, info and syncPolicy through
     set:
       cluster.apps.passthrough: true

@@ -13,12 +13,12 @@ MARKDOWN := $(filter-out CHANGELOG.md,$(filter %.md,$(TEXT)))
 FLOW_MAPPING := (:|^\s*-)\s+\{(?!\{)\s*[^{}\s\#"'"'"'][^{}]*?:\s
 CRDS := test/schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
 
-.PHONY: lint files actions secrets renovate markdown yaml check chart unit golden validate hooks
+.PHONY: lint files actions secrets renovate markdown yaml shell check chart unit golden validate hooks
 
-lint: files actions secrets renovate markdown yaml
+lint: files actions secrets renovate markdown yaml shell
 
 files:
-	$(CHECK) --volume "$(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro" $(PRE_COMMIT_HOOKS) check-merge-conflict $(TEXT)
+	$(CHECK) $(PRE_COMMIT_HOOKS) check-merge-conflict --assume-in-merge $(TEXT)
 	$(CHECK) $(PRE_COMMIT_HOOKS) check-yaml $(YAML)
 	$(FIX) $(PRE_COMMIT_HOOKS) end-of-file-fixer $(TEXT)
 	$(FIX) $(PRE_COMMIT_HOOKS) trailing-whitespace-fixer --markdown-linebreak-ext=md $(TEXT)
@@ -38,8 +38,11 @@ markdown:
 
 yaml:
 	$(CHECK) $(YAMLLINT) --strict .
-	! $(CHECK) --volume "$(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro" $(PRE_COMMIT_HOOKS) \
-		git grep -nP '$(FLOW_MAPPING)' -- '*.yaml' '*.yml' '*.gotmpl' ':!test/golden'
+	$(CHECK) --volume "$(GIT_COMMON_DIR):$(GIT_COMMON_DIR):ro" $(PRE_COMMIT_HOOKS) \
+		git grep -nP '$(FLOW_MAPPING)' -- '*.yaml' '*.yml' '*.gotmpl' ':!test/golden'; test $$? -eq 1
+
+shell:
+	$(CHECK) --entrypoint /usr/local/bin/shellcheck $(ACTIONLINT) .githooks/pre-push
 
 check: chart unit golden validate
 	git diff --exit-code -- test/golden
@@ -65,7 +68,7 @@ golden:
 		--set argocdAppLoader.source.path=packages/core --set argocdAppLoader.package=core \
 		> test/golden/catalogue-core.yaml
 
-validate:
+validate: golden
 	$(CHECK) --entrypoint kubeconform $(HELM) -strict -summary -schema-location '$(CRDS)' test/golden/*.yaml
 
 hooks:
