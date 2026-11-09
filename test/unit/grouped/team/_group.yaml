@@ -1,0 +1,2 @@
+# Read only by the test that sets argocdAppLoader.appsRoot: grouped.
+project: shared

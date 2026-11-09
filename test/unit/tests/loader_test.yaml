@@ -117,6 +117,54 @@ tests:
           path: spec.syncPolicy
           value: {}
 
+  - it: passes an app's releaseName, ignoreDifferences, info and syncPolicy through
+    set:
+      cluster.apps.passthrough: true
+    asserts:
+      - equal:
+          path: spec.sources[0].helm.releaseName
+          value: renamed
+      - equal:
+          path: spec.ignoreDifferences
+          value:
+            - group: apps
+              kind: Deployment
+              jsonPointers:
+                - /spec/replicas
+      - equal:
+          path: spec.info
+          value:
+            - name: docs
+              value: https://example.com/docs
+      - equal:
+          path: spec.syncPolicy
+          value:
+            automated:
+              selfHeal: false
+
+  - it: renders an app's annotations as templates, beside its sync wave
+    set:
+      cluster.apps.passthrough: true
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/domain"]
+          value: example.com
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "0"
+
+  - it: gives an app without a project its group's project
+    set:
+      argocdAppLoader.appsRoot: grouped
+      cluster.apps.member: true
+    documentSelector:
+      path: kind
+      value: Application
+    asserts:
+      - equal:
+          path: spec.project
+          value: shared
+
   - it: keeps an explicit empty AppProject list instead of allowing everything
     set:
       argocdAppLoader.appsRoot: groups

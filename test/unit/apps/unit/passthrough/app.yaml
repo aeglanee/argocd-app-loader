@@ -1,0 +1,20 @@
+# Fields the loader passes through to the Application, one of each.
+project: unit
+chart:
+  repo: https://charts.example.com
+  name: upstream
+  version: "1.0.0"
+releaseName: renamed
+annotations:
+  example.com/domain: "{{ .Values.cluster.domain }}"
+ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+      - /spec/replicas
+info:
+  - name: docs
+    value: https://example.com/docs
+syncPolicy:
+  automated:
+    selfHeal: false

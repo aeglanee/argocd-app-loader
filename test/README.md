@@ -10,21 +10,9 @@ change.
 | `examples/consumer` | `golden/example.yaml` | a single chart (no packages) |
 | `examples/fleet/root` + `examples/catalogue/values.yaml` + `examples/fleet/clusters/demo/values.yaml` | `golden/fleet.yaml` | a root of roots: packages in the catalogue, in another repo, in the fleet repo |
 | `examples/catalogue/packages/core` | `golden/catalogue-core.yaml` | one of the catalogue's packages, as its Application renders it |
-| `fixtures/gitops` | `golden/gitops.yaml` | frozen copy of the real consumer |
-| `fixtures/gitops` + `second-cluster-values.yaml` | `golden/gitops-second.yaml` | a made-up second cluster, as a delta layered over the first |
 
-`fixtures/gitops` holds only what the loader reads (`app.yaml`, `_group.yaml`, `Chart.yaml`,
-`values.yaml`, `values.yaml.gotmpl`, `templates/render.yaml`), copied on 2026-10-29 from
-`aeglanee/gitops` `316e55d`, plus `cluster-values.yaml` from `aeglanee/homelab` `44958259`. Its
-`Chart.yaml` points at the local loader. At that point its render matched the live cluster's
-Applications and AppProjects. It is not kept in sync with gitops.
-
-It has no wrapper `templates/`, so its goldens can't show that a wrapper reads a value its values
-file doesn't pass: since 0.9 the loader passes only the values file, and the fixture's 0.8-era
-wrappers would now get `valuesObject: {}`. Rendering the wrappers themselves is gitops's job.
-
-The full copy is temporary: it guards the loader workover against changes nobody intended. Once
-gitops renders the loader in its own CI, shrink it to one app per shape.
+Each example is small and shows one shape; the unit tests pin single behaviours, one fixture app
+each.
 
 ## Unit tests
 

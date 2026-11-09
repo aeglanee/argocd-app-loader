@@ -40,6 +40,7 @@ set:
           no-finalizers: false
           null-finalizers: false
           old-requires: false
+          passthrough: false
           plain: true
           sources-chart: false
           sync-options: true
