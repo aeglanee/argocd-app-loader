@@ -1,4 +1,3 @@
-# Fields the loader passes through to the Application, one of each.
 project: unit
 chart:
   repo: https://charts.example.com

@@ -27,7 +27,6 @@ tests:
       - hasDocuments:
           count: 0
 
-  # Files that don't parse fail the render with the file's name.
   - it: fails on values that are not valid YAML after templating
     set:
       cluster.apps.invalid-values: true
@@ -49,8 +48,6 @@ tests:
       - failedTemplate:
           errorPattern: "argocd-app-loader: apps/unit/invalid-app-yaml/app.yaml is not a valid YAML mapping: "
 
-  # The group tests point appsRoot at a root of their own: every _group.yaml under the root
-  # becomes an AppProject, whether or not one of its apps is on.
   - it: fails on a _group.yaml that is not valid YAML
     set:
       argocdAppLoader.appsRoot: invalid-groups
@@ -58,7 +55,6 @@ tests:
       - failedTemplate:
           errorPattern: "argocd-app-loader: invalid-groups/broken/_group.yaml is not a valid YAML mapping: "
 
-  # syncOptions
   - it: leaves out syncOptions when there are none
     set:
       cluster.apps.plain: true
@@ -76,7 +72,6 @@ tests:
             - CreateNamespace=true
             - ServerSideApply=true
 
-  # An explicit empty value is kept; only a missing (or null) field gets the default.
   - it: gives an app the resources finalizer by default, also for a null field
     set:
       cluster.apps.null-finalizers: true

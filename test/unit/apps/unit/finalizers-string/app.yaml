@@ -1,3 +1,2 @@
-# A list written without `- `: rendered as written so validation rejects it.
 project: unit
 finalizers: resources-finalizer.argocd.argoproj.io/background

@@ -1,4 +1,3 @@
-# An upstream chart plus a local chart: values split into chart: (upstream) and the rest (local).
 project: unit
 chart:
   repo: https://charts.example.com

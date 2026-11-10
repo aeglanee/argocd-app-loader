@@ -1,21 +1,18 @@
 apiVersion: v2
 name: argocd-app-loader
-description: |
-  Helm library chart that discovers per-app wrapper charts on the consumer's
-  filesystem and emits one Argo CD Application per enabled app + one AppProject
-  per group. Each app's values file is rendered against the consumer's values
-  and passed via helm.valuesObject. Also a root of roots (one Application per
-  picked package) and a dependency check in every render.
+description: >-
+  Renders Argo CD Applications and AppProjects from a folder per app and per group, with a root of
+  roots for packages and a dependency check in every render.
 type: library
 version: 0.10.0
-home: https://github.com/aeglanee/argocd-app-loader
+home: https://github.com/sessrumnir/argocd-app-loader
 sources:
-  - https://github.com/aeglanee/argocd-app-loader
+  - https://github.com/sessrumnir/argocd-app-loader
 keywords:
   - argocd
   - gitops
   - app-of-apps
   - helm-library
 maintainers:
-  - name: aeglanee
-    url: https://github.com/aeglanee
+  - name: sessrumnir
+    url: https://github.com/sessrumnir

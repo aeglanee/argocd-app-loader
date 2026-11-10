@@ -1,4 +1,3 @@
-{{- /* The lookups values files use, for packages_test.yaml: lookupTest.running lists apps, lookupTest.provided capabilities. */ -}}
 {{- with .Values.lookupTest }}
 ---
 apiVersion: v1

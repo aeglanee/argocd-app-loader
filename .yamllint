@@ -2,15 +2,12 @@
 extends: default
 
 ignore: |
-  # Helm templates are Go templates, not YAML, until rendered.
   templates/
   examples/consumer/templates/
   examples/consumer/apps/*/*/templates/
   charts/
   examples/consumer/charts/
-  # Deliberately broken, for the unit tests that expect the render to fail.
   test/unit/**/invalid-*/
-  # Generated: Helm's output, compared byte for byte.
   test/golden/
 
 rules:
@@ -20,8 +17,6 @@ rules:
   comments:
     min-spaces-from-content: 1
   comments-indentation: false
-  # Block style only: `{ a: b }` mappings are harder to read and diff. Empty `{}` stays allowed.
-  # Helm templates are ignored above; `make yaml` checks them for flow mappings.
   braces:
     forbid: non-empty
   document-start: disable

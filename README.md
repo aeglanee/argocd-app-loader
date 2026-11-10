@@ -1,5 +1,9 @@
 # argocd-app-loader
 
+[![CI](https://github.com/sessrumnir/argocd-app-loader/actions/workflows/ci.yml/badge.svg)](https://github.com/sessrumnir/argocd-app-loader/actions/workflows/ci.yml)
+[![Release](https://github.com/sessrumnir/argocd-app-loader/actions/workflows/release.yml/badge.svg)](https://github.com/sessrumnir/argocd-app-loader/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](license)
+
 A Helm **library chart** that renders Argo CD `Application` and `AppProject`
 custom resources from a **filesystem layout**. Drop it into your cluster
 "app-of-apps" chart and stop maintaining a 500-line registry of every app.
@@ -19,10 +23,10 @@ apps/
 ├── infrastructure/
 │   ├── _group.yaml                   # AppProject metadata
 │   ├── cilium/
-│   │   ├── Chart.yaml                # depends on upstream cilium chart
-│   │   ├── app.yaml                  # ArgoCD Application metadata
-│   │   ├── values.yaml               # values for upstream + your own templates
-│   │   └── templates/                # your custom resources (ingress, IPPool, etc.)
+│   │   ├── app.yaml                  # Application metadata; chart: names the upstream chart
+│   │   ├── values.yaml.gotmpl        # values: chart: for the upstream chart, the rest for your own
+│   │   ├── Chart.yaml                # optional: the chart for templates/, without dependencies
+│   │   └── templates/                # your own resources (routes, IP pools, secrets)
 │   └── traefik/
 │       └── ...
 └── monitoring/
@@ -68,12 +72,12 @@ version: 0.1.0
 dependencies:
   - name: argocd-app-loader
     version: "0.10.0" # x-release-please-version
-    repository: "oci://ghcr.io/aeglanee/charts"
-    # Or, for a local checkout during library development:
-    # repository: "file://../../argocd-app-loader"
+    repository: "oci://ghcr.io/sessrumnir/charts"
 ```
 
-Run `helm dependency update`.
+Run `helm dependency update`. The chart is private: Helm needs `helm registry login ghcr.io`, and
+Argo CD a repository credential for `ghcr.io/sessrumnir/charts`, each with a token that may read
+packages.
 
 ### 2. One-line render template
 
@@ -199,10 +203,21 @@ Missing `repo`/`version`, a missing `name` on OCI or HTTP, a scheme-less `repo`,
 saying what to fix.
 
 ```yaml
-chart: { repo: oci://ghcr.io/acme/charts, name: myapp, version: "1.2.3" }        # OCI registry
-chart: { repo: https://charts.example.com, name: myapp, version: "1.2.3" }        # HTTP Helm repo
-chart: { repo: https://github.com/acme/operator, path: deploy/chart, version: v0.3.1 } # git
-chart: { repo: oci://ghcr.io/acme/charts, name: myapp, version: "1.2.3", mirror: false } # never mirrored
+chart:                       # OCI registry
+  repo: oci://ghcr.io/acme/charts
+  name: myapp
+  version: "1.2.3"
+  mirror: false              # optional: never through cluster.mirrors
+---
+chart:                       # HTTP Helm repo
+  repo: https://charts.example.com
+  name: myapp
+  version: "1.2.3"
+---
+chart:                       # a chart in a git repo
+  repo: https://github.com/acme/operator
+  path: deploy/chart
+  version: v0.3.1
 ```
 
 #### Mirrors (`cluster.mirrors`) — airgap
@@ -215,20 +230,31 @@ explicit `repoURL`) through it:
 cluster:
   mirrors:
     via:                   # one switch per method
-      harbor:  { enabled: true,  host: "harbor.{{ .Values.cluster.domain }}" }
-      shim:    { enabled: true,  project: shim-proxy }          # host defaults to via.harbor.host
-      forgejo: { enabled: false, base: "http://forgejo.example.svc:3000/mirror-bot" }
-    table:                 # scheme-less upstream prefix → method (+ its target)
-      ghcr.io:                  { via: harbor, project: ghcr-proxy }
-      charts.example.com:       { via: shim }
-      github.com/acme/operator: { via: forgejo, repo: operator }
+      harbor:
+        enabled: true
+        host: "harbor.{{ .Values.cluster.domain }}"
+      shim:
+        enabled: true
+        project: shim-proxy          # host defaults to via.harbor.host
+      forgejo:
+        enabled: false
+        base: "http://gitea.example.svc:3000/mirrors"
+    table:                 # scheme-less upstream prefix → method and its target
+      ghcr.io:
+        via: harbor
+        project: ghcr-proxy
+      charts.example.com:
+        via: shim
+      github.com/acme/operator:
+        via: forgejo
+        repo: operator
 ```
 
 | Method | Fits | Rewrites to |
 |---|---|---|
 | `harbor` | OCI | `<host>/<project>/<path-after-key>` |
 | `shim` | HTTP | `<host>/<project>/<repo-host+path>` (an HTTP→OCI transform shim behind the proxy) |
-| `forgejo` | git | `<base>/<repo>` |
+| `forgejo` | git | `<base>/<repo>` (any git host with pull mirrors, such as Gitea) |
 
 Lookup strips the scheme (and a trailing `/` or `.git`) and takes the **longest key that
 matches whole path segments** — `github.com/acme/operator` beats `github.com`, and
@@ -295,10 +321,19 @@ Default sync policy when `syncPolicy` is not declared:
 
 ```yaml
 syncPolicy:
-  automated: { prune: true, selfHeal: true }
-  retry: { limit: 10, backoff: { duration: 30s, factor: 2, maxDuration: 5m } }
-  syncOptions: [ … from createNamespace + syncOptions; left out when both are empty … ]
+  automated:
+    prune: true
+    selfHeal: true
+  retry:
+    limit: 10
+    backoff:
+      duration: 30s
+      factor: 2
+      maxDuration: 5m
+  syncOptions: []   # from createNamespace and syncOptions; left out when both are empty
 ```
+
+Without `retry`, Argo CD doesn't try a failed sync again for the same commit.
 
 ### `_group.yaml` (per-group AppProject metadata)
 
@@ -552,34 +587,20 @@ in their apps.
 
 ## Publishing & consuming
 
-Helm has no native git dependency mechanism, so consumers fetch the chart
-from one of:
+Helm has no git dependencies, so the chart is published to an OCI registry,
+`oci://ghcr.io/sessrumnir/charts` (see **Quick start**). [release.yml](.github/workflows/release.yml)
+publishes when the release pull request is merged (see **Development**): the checks again, then a
+push that refuses a version ghcr already has.
 
-- **OCI registry** (recommended):
-
-  ```yaml
-  dependencies:
-    - name: argocd-app-loader
-      version: "0.10.0" # x-release-please-version
-      repository: "oci://ghcr.io/<owner>/charts"
-  ```
-
-  Publish from CI with
-  `helm push <chart>.tgz oci://ghcr.io/<owner>/charts`. Argo CD supports
-  OCI Helm repos natively. This repo's [release.yml](.github/workflows/release.yml)
-  does it when the release pull request is merged (see **Development**): the checks again,
-  then a push that refuses a version ghcr already has.
-
-- **Local filesystem** (`file://`): only useful when iterating on the
-  library and a consumer side-by-side in the same checkout. Not portable.
-  The `examples/consumer/` directory in this repo uses this for its
-  in-repo demo; real deployments use OCI.
+A `file://` repository works only for a consumer in the same checkout, as in
+[examples/](examples/README.md).
 
 ## Development
 
 Every tool runs in its own container (Docker, no network), pinned in `tools.mk`: Helm 4 with the
 helm-unittest plugin and kubeconform (Argo CD 3.5+ renders with Helm 4), and the linters. `make lint`
-checks files, workflows, secrets, the Renovate config, Markdown and YAML; `make check` lints the
+checks files, workflows, secrets, the Renovate config, Markdown and YAML (block style only: a
+`{ a: b }` mapping fails, an empty `{}` passes); `make check` lints the
 chart, runs the unit tests, renders the golden files and validates them, as CI does; `make hooks`
 runs `make lint check` before every push.
 
@@ -592,6 +613,27 @@ A loader change that alters output fails `make check`; see [test/README.md](test
 Releases: Release Please keeps a release pull request open on `main`, with the next version in
 `Chart.yaml` and `CHANGELOG.md` written from the commit titles (Conventional Commits); merging it
 tags the release and publishes the chart.
+
+`.helmignore` keeps everything but the library out of the package. Without it, each chart that
+pulls the loader through `file://` (the examples, the unit-test chart) would package the whole
+repo, the other charts' `charts/*.tgz` included, and the archives would nest and grow on every run.
+
+### Template conventions
+
+The templates hold no comments; what a define does is in **API contract** above, and a unit test
+pins each of these:
+
+- A field that may be empty on purpose (`finalizers: []`, `syncPolicy: {}`, `sourceRepos: []`) is
+  tested with `kindIs "invalid"`: `default` and `with` treat an empty list, an empty map and
+  `false` as unset.
+- `fromYaml` never fails: for a file that isn't a mapping it returns `{Error: …}`.
+  `argocd-app-loader.requireYaml` turns that into a failed render.
+- A helper returns text, so maps travel as YAML (`toYaml`, then `fromYaml`), and a value that
+  isn't a map comes back as an empty one: check its type before `toYaml`.
+- `get` returns `""` for a missing key; `index` returns nothing, which `kindIs "invalid"` sees.
+- `concat` of two empty lists is null, which `toYaml` would write as `syncOptions: null`.
+- Git refs and `kubeVersion` must be strings: YAML reads an unquoted `1.10` as `1.1`.
+- An error names `argocd-app-loader:`, the key or file, and what to change.
 
 ## Status
 
@@ -611,4 +653,4 @@ Pre-1.0: pin a version. Breaking changes per release:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT

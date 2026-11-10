@@ -1,4 +1,3 @@
-# Invalid: kustomize/ and an upstream chart: block.
 project: unit
 chart:
   repo: https://charts.example.com

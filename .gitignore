@@ -1,9 +1,6 @@
-# Helm
 charts/
 Chart.lock
 *.tgz
-
-# Editor
 .idea/
 .vscode/
 *.swp

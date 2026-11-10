@@ -1,16 +1,3 @@
-{{- /*
-  argocd-app-loader.appproject — render one Argo CD AppProject from a metadata dict.
-
-  Reads the fields the README's _group.yaml table lists; anything else in meta is ignored.
-
-  Expected input dict keys:
-    name   : project name (= group folder name by convention)
-    meta   : parsed _group.yaml content
-    wave   : sync-wave, below every app that is on: an app whose project doesn't exist yet is
-             never reconciled, so with the Application health check its wave would never finish
-    cluster : .Values.cluster from the consumer chart
-    Values : full consumer .Values (so tpl works against it)
-*/ -}}
 {{- define "argocd-app-loader.appproject" -}}
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -24,11 +11,6 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- /*
-    A field that is present is rendered as written, even when empty: `[]` allows nothing, and a
-    wrong type fails validation instead of widening to `*`. Only a missing or null field gets the
-    default (or is left out). Not `default`/`with`: both treat an empty list or map as unset.
-  */}}
   description: {{ .meta.description | default .name | quote }}
   sourceRepos:
     {{- toYaml (ternary .meta.sourceRepos (list "*") (not (kindIs "invalid" .meta.sourceRepos))) | nindent 4 }}

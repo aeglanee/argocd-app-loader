@@ -6,7 +6,7 @@ metadata:
   name: cluster
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false   # a render that drops it can't delete it
+    argocd.argoproj.io/sync-options: Prune=false
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -32,7 +32,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # As for apps: a failed sync isn't retried for the same commit otherwise.
     retry:
       limit: 10
       backoff:
@@ -66,12 +65,12 @@ spec:
           - $values/clusters/demo/values.yaml
         valuesObject:
           argocdAppLoader:
-            source:                     # where this package's files are
+            source:
               repoURL: "https://github.com/example/catalogue.git"
               targetRevision: "HEAD"
               path: "packages/core"
-            package: "core"        # for the dependency list
-            rootName: "cluster"   # no app may take it
+            package: "core"
+            rootName: "cluster"
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
@@ -85,7 +84,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # As for apps: a failed sync isn't retried for the same commit otherwise.
     retry:
       limit: 10
       backoff:
@@ -118,12 +116,12 @@ spec:
           - $values/clusters/demo/values.yaml
         valuesObject:
           argocdAppLoader:
-            source:                     # where this package's files are
+            source:
               repoURL: "https://github.com/example/media-package.git"
               targetRevision: "v1.2.0"
               path: "."
-            package: "media"        # for the dependency list
-            rootName: "cluster"   # no app may take it
+            package: "media"
+            rootName: "cluster"
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
@@ -137,7 +135,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # As for apps: a failed sync isn't retried for the same commit otherwise.
     retry:
       limit: 10
       backoff:
@@ -170,12 +167,12 @@ spec:
           - $values/clusters/demo/values.yaml
         valuesObject:
           argocdAppLoader:
-            source:                     # where this package's files are
+            source:
               repoURL: "https://github.com/example/fleet.git"
               targetRevision: "HEAD"
               path: "packages/site"
-            package: "site"        # for the dependency list
-            rootName: "cluster"   # no app may take it
+            package: "site"
+            rootName: "cluster"
     - repoURL: "https://github.com/example/catalogue.git"
       targetRevision: "HEAD"
       ref: catalogue
@@ -189,7 +186,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # As for apps: a failed sync isn't retried for the same commit otherwise.
     retry:
       limit: 10
       backoff:

@@ -1,4 +1,3 @@
-# One cluster: what it runs, and where things are. Layered over the catalogue's values.yaml.
 cluster:
   domain: demo.example.com
   remoteGitRepo: https://github.com/example/catalogue.git
@@ -7,12 +6,12 @@ cluster:
     - clusters/demo/values.yaml
   packages:
     core:
-      enabled: true               # its usual apps: hello, needs-hello
+      enabled: true
     media:
       enabled: true
-      version: v1.2.0             # pinned to a tag
+      version: v1.2.0
   instancePackages:
-    site:                         # a package in the fleet repo
+    site:
       path: packages/site
       wave: 30
-      apps: {}                    # every app of it, true or false (none yet)
+      apps: {}

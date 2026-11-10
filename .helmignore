@@ -1,7 +1,3 @@
-# Only the library itself belongs in the package. Without this, every consumer that pulls the loader
-# through file:// (the examples, the unit-test chart) packages the whole repo, including the other
-# consumers' charts/*.tgz, so the tarballs nest inside each other and grow on every run until Helm
-# refuses them.
 .git
 .githooks/
 .github/

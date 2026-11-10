@@ -1,28 +1,20 @@
-# The catalogue: which packages exist, their order, where they live, their apps, and the defaults
-# every package (and the root) reads.
 cluster:
-  domain: example.com             # a default; a cluster's file sets its own
-  # Each package: picked or not (a cluster's file sets enabled: true), its wave, where it lives, and
-  # every app with whether it runs when the package is picked. A cluster's file changes only what
-  # differs; Helm merges the two.
+  domain: example.com
   packages:
     core:
       enabled: false
-      wave: 0                     # packages/core in this repo
+      wave: 0
       apps:
         hello: true
         needs-hello: true
     media:
       enabled: false
-      wave: 20                    # a package from another repo
+      wave: 20
       repoURL: https://github.com/example/media-package.git
       apps:
         jellyfin: true
 
 argocdAppLoader:
-  # Dependencies, checked in each package's render: what an app requires and provides (every app
-  # above counts as listed). Switching hello off while needs-hello is on fails core's render, so
-  # nothing is pruned.
   dependencies:
     hello:
       provides:

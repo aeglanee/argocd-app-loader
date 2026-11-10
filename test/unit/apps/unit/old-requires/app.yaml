@@ -1,4 +1,3 @@
-# Invalid since 0.9: requires: moved to argocdAppLoader.dependencies.
 project: unit
 requires:
   - plain

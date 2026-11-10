@@ -3,21 +3,18 @@ cluster:
   clusterServer: https://kubernetes.default.svc
   argocdNamespace: argocd
 
-  # Chart/git MIRRORS. Apps always declare their real upstream (chart.repo); this block
-  # decides whether a source is pulled through a local mirror instead. Private only when
-  # the method is enabled AND a table key matches AND the app has not set mirror: false.
   mirrors:
     via:
-      harbor:  # OCI proxy-cache
+      harbor:
         enabled: false
         host: "harbor.{{ .Values.cluster.domain }}"
-      shim:  # HTTP repo → OCI (host defaults to harbor's)
+      shim:
         enabled: false
         project: shim-proxy
       forgejo:
         enabled: false
         base: "http://gitea.{{ .Values.cluster.domain }}/example"
-    table:  # scheme-less upstream prefix, longest match wins (whole path segments)
+    table:
       ghcr.io:
         via: harbor
         project: ghcr-proxy
@@ -27,7 +24,6 @@ cluster:
         via: forgejo
         repo: rustfs-operator
 
-  # App on/off toggles. A values file asks argocd-app-loader.running about a peer app.
   apps:
     hello: true
     gitchart: true
@@ -36,15 +32,11 @@ cluster:
     wrapped: true
     patched: true
 
-# Where this chart's own files live. The loader points each app's local chart here; Helm can't
-# tell on its own where a chart sits in its repo.
 argocdAppLoader:
   source:
     repoURL: "git@github.com:example/cluster.git"
     targetRevision: HEAD
     path: examples/consumer
-  # Dependencies, checked in the render (opt-in: unlisted apps aren't checked). Switching hello off
-  # while patched is on fails the render instead of pruning hello.
   dependencies:
     patched:
       requires:

@@ -2,7 +2,6 @@ suite: features
 templates:
   - render.yaml
 tests:
-  # Where the app's own files live: argocdAppLoader.source.
   - it: points an app's local source at argocdAppLoader.source, below its path
     set:
       cluster.apps.plain: true
@@ -55,7 +54,6 @@ tests:
           path: spec.source.path
           value: nested/apps/deep/inner
 
-  # Wrappers get only their own values.
   - it: gives the local chart its values without the cluster block
     set:
       cluster.apps.wrapped: true
@@ -72,7 +70,6 @@ tests:
             route:
               hostname: wrapped.example.com
 
-  # cluster.overrides.<app>
   - it: merges cluster.overrides over the rendered values, replacing lists
     set:
       cluster.apps.wrapped: true
@@ -104,7 +101,6 @@ tests:
       - failedTemplate:
           errorPattern: "cluster.overrides.wrapped must be a mapping of values, got string"
 
-  # Pinned versions.
   - it: pins kubeVersion and apiVersions on every Helm source
     set:
       cluster.apps.wrapped: true
@@ -141,7 +137,6 @@ tests:
       - notExists:
           path: spec.source.helm.apiVersions
 
-  # Kustomize form.
   - it: renders kustomize/ as a Kustomize source beside the local chart
     set:
       cluster.apps.kustomized: true
@@ -195,7 +190,6 @@ tests:
       - failedTemplate:
           errorPattern: "has sources: in app.yaml and a Chart.yaml"
 
-  # Review fixes.
   - it: quotes the revision, so a tag like 1.10 stays a string
     set:
       cluster.apps.plain: true

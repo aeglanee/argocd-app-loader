@@ -1,4 +1,3 @@
-# Invalid: repoURL: would silently replace the local chart beside it.
 project: unit
 repoURL: https://git.example.com/other.git
 path: deploy

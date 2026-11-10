@@ -1,4 +1,3 @@
-# An upstream chart from an OCI registry.
 project: unit
 chart:
   repo: oci://ghcr.io/acme/charts

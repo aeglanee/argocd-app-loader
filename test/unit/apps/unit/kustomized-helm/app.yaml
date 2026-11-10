@@ -1,4 +1,3 @@
-# Its helm: block goes to the local chart: the Kustomize form has no Helm upstream source.
 project: unit
 helm:
   skipCrds: true

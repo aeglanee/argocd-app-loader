@@ -1,3 +1,2 @@
-# Invalid: another repo, but no path in it.
 project: unit
 repoURL: https://git.example.com/other.git

@@ -27,7 +27,6 @@ set:
         enabled: true
       unit:
         wave: 10
-        # Every app folder of the unit chart; plain and sync-options are its usual apps.
         apps:
           external: false
           external-chart: false

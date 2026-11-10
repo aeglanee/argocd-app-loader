@@ -1,4 +1,3 @@
-# Another repo, kept off cluster.mirrors.
 project: unit
 repoURL: https://git.example.com/other.git
 path: deploy

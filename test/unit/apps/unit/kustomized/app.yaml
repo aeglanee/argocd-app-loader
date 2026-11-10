@@ -1,2 +1,1 @@
-# Kustomize form: kustomize/ renders the upstream chart and its patches, the local chart the rest.
 project: unit

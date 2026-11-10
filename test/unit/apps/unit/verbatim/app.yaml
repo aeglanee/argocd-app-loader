@@ -1,4 +1,3 @@
-# sources: as written; a Helm source gets the pins.
 project: unit
 sources:
   - repoURL: https://charts.example.com

@@ -1,15 +1,3 @@
-{{- /*
-  argocd-app-loader.chartKind — infer an app.yaml `chart:` block's source type from its fields.
-
-    repo: oci://…                → "oci"   (OCI Helm registry)
-    repo: https://… + path       → "git"   (Helm chart inside a git repo; version = git ref)
-    repo: https://… (no path)    → "helm"  (classic HTTP Helm repo with an index.yaml)
-
-  Anything else fails the render loudly — there is no silent fallback. The pre-0.8 keys
-  (chart.oci / chart.http / chart.git / chart.revision) are rejected with a migration hint.
-
-  Input: the chart dict.
-*/ -}}
 {{- define "argocd-app-loader.chartKind" -}}
 {{- $c := . -}}
 {{- range $old := list "oci" "http" "git" "revision" -}}
@@ -30,32 +18,6 @@
 {{- end -}}
 {{- end -}}
 
-{{- /*
-  argocd-app-loader.mirrorURL — resolve one upstream URL through cluster.mirrors.
-
-  cluster.mirrors:
-    via:     # one switch per mirror METHOD
-      harbor:  { enabled, host }            oci  → <host>/<project>/<rest-after-key>
-      shim:    { enabled, host, project }   helm → <host>/<project>/<repo-host+path>   (served as OCI)
-      forgejo: { enabled, base }            git  → <base>/<repo>
-    table:   # scheme-less upstream prefix → { via, project | repo }
-      ghcr.io:                          { via: harbor, project: ghcr-proxy }
-      charts.longhorn.io:               { via: shim }
-      github.com/deuxfleurs-org/garage: { via: forgejo, repo: garage }
-
-  Rule — the URL goes private ONLY when all three hold, otherwise it is returned public:
-    1. the app did not opt out (mirror: false),
-    2. a table key matches (longest prefix, whole path segments only),
-    3. that entry's method is enabled.
-  A missing entry is never an error (cold-start safe: public is the default). A matched entry
-  whose method does not fit the source type IS an error, even while the method is disabled,
-  so a bad table fails at bootstrap rather than on the day you flip the switch.
-
-  Public form: OCI loses its oci:// (ArgoCD OCI Helm sources take a scheme-less repoURL + the
-  chart field); helm and git URLs are returned exactly as written.
-
-  Input dict: url, kind (oci|helm|git), mirror (bool), cluster, Root (for tpl of the result).
-*/ -}}
 {{- define "argocd-app-loader.mirrorURL" -}}
 {{- $url := toString .url -}}
 {{- $m := default dict .cluster.mirrors -}}
@@ -99,7 +61,6 @@
 {{- tpl $out .Root -}}
 {{- end -}}
 
-{{- /* argocd-app-loader.mirrorFlag — a `mirror:` field as a bool; absent means true. */ -}}
 {{- define "argocd-app-loader.mirrorFlag" -}}
 {{- ternary . true (kindIs "bool" .) -}}
 {{- end -}}

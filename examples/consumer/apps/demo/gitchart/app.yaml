@@ -1,10 +1,6 @@
 wave: 8
 namespace: gittest
 createNamespace: true
-# Git-sourced Helm chart (a chart that lives in a git repo, not a registry): having a
-# chart.path makes it a git chart, and chart.version is the git tag / branch / SHA.
-# Mirrored to <forgejo.base>/<repo> only when via.forgejo is enabled AND the table has an
-# entry for this repo — otherwise cloned from the public URL as written.
 chart:
   repo: https://github.com/rustfs/operator
   path: deploy/rustfs-operator

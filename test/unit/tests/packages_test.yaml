@@ -19,7 +19,6 @@ set:
         enabled: true
       unit:
         wave: 10
-        # Every app folder of the unit chart; plain and sync-options are its usual apps.
         apps:
           external: false
           external-chart: false
@@ -201,7 +200,6 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "cluster.packages.base.apps.store must be true or false, got on"
-  # Lookups for values files.
 
   - it: says an app runs when its package is picked and it is on
     template: lookups.yaml

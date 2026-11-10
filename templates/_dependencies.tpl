@@ -1,47 +1,7 @@
-{{- /*
-  argocd-app-loader.dependencies — the dependency list, checked in every package's own render.
-  Each package renders and syncs on its own, so a check only stops a deletion if it runs inside
-  the package that would delete. The list sits in values every package reads (the catalogue's
-  values.yaml), so each one sees every dependency, also those of apps in other packages:
-
-      argocdAppLoader:
-        dependencies:
-          harbor:
-            requires: [cnpg, storage.replicated]   # app names, or what some app provides:
-          longhorn:
-            provides: [storage.replicated]
-
-  With packages, cluster.packages.<p>.apps says where each app is, and every app in it counts as
-  listed; in a single chart only the entries are listed (opt-in). A
-  listed app is on when its package is picked and it is on there (isOn). Each package checks only
-  its own apps, and fails when:
-    - one that is on requires something no app that is on is named or provides;
-    - one that is off is required (by name, or for something only it provides) by an app that is
-      on, anywhere; so nothing is pruned until the dependents are off too;
-    - a requirement comes later: from a later package wave, or inside one package a later app
-      wave (the same wave passes);
-    - a required name isn't known at all (a typo, or an entry removed while something on still
-      requires it; this fails every render, also the one that would prune), an entry names an app
-      no package lists or still sets package:;
-    - a package's app list and its folders disagree, or an override names an app of another
-      package or none (the root checks every package's).
-
-  Limits: a package pinned to a version checks the list at that version; removing a provider and
-  its dependents in one commit passes, and the packages then prune in parallel, so switch the
-  dependents off first. Duplicate names of groups across packages aren't seen.
-
-  argocdAppLoader.package names the package being rendered; the root of roots sets it. Without it
-  (a single chart), every listed app belongs here.
-
-  The root of roots calls it with "all" true: it checks every listed app, since switching a whole
-  package off is its decision (it would prune the package Application). It can't read the
-  packages' files, so it skips what needs them: whether a listed app exists, and app waves.
-*/ -}}
 {{- define "argocd-app-loader.dependencies" -}}
 {{- $root := .Root -}}
 {{- $V := $root.Values -}}
 {{- $cfg := default dict $V.argocdAppLoader -}}
-{{- /* A null entry drops out: a cluster's file can remove one the catalogue lists. */ -}}
 {{- $deps := dict -}}
 {{- $nulled := list -}}
 {{- range $n, $e := default dict $cfg.dependencies -}}
@@ -53,19 +13,15 @@
     {{- $_ := set $deps $n $e -}}
   {{- end -}}
 {{- end -}}
-{{- /* Every app a package lists counts as listed, in that package; a null entry of one only
-       drops its requires and provides. */ -}}
 {{- $appPkg := include "argocd-app-loader.appPackages" $V | fromYaml -}}
 {{- range $a := keys $appPkg -}}
   {{- if not (hasKey $deps $a) }}{{ $_ := set $deps $a (dict) }}{{ end -}}
 {{- end -}}
-{{- /* A package always checks its folders against its app list, even with nothing listed. */ -}}
 {{- if or $deps $cfg.package -}}
 {{- $all := default false .all -}}
 {{- $self := ternary "" (toString (default "" $cfg.package)) $all -}}
 {{- $c := default dict $V.cluster -}}
 
-{{- /* Packages: picked or not, and their wave. The one being rendered is picked. */ -}}
 {{- $pkgs := dict -}}
 {{- range $n, $p := default dict $c.packages -}}
   {{- $_ := set $pkgs $n (dict "on" (or (eq (include "argocd-app-loader.picked" $p) "true") (eq $n $self)) "wave" (int (default 0 (default dict $p).wave))) -}}
@@ -74,15 +30,13 @@
   {{- $_ := set $pkgs $n (dict "on" true "wave" (int (default 0 (default dict $p).wave))) -}}
 {{- end -}}
 
-{{- /* A package's overrides must name one of its apps: a misplaced or misspelt one would do
-       nothing. The root checks every package, a package its own. */ -}}
 {{- range $pn := keys $pkgs | sortAlpha -}}
   {{- if or $all (eq $pn $self) -}}
     {{- $has := list -}}
     {{- range $a, $ap := $appPkg }}{{ if eq $ap $pn }}{{ $has = append $has $a }}{{ end }}{{ end -}}
     {{- $where := include "argocd-app-loader.scopedKey" (dict "Values" $V "package" $pn "key" "overrides") -}}
     {{- range $a, $v := include "argocd-app-loader.scoped" (dict "Values" $V "package" $pn "key" "overrides") | fromYaml -}}
-      {{- if kindIs "invalid" $v }}{{ continue }}{{ end -}}{{- /* null: removed by a later file */ -}}
+      {{- if kindIs "invalid" $v }}{{ continue }}{{ end -}}
       {{- if ne (get $appPkg $a) $pn -}}
         {{- fail (printf "argocd-app-loader: %s.%s: %s" $where $a (ternary (printf "%s is in package %s" $a (get $appPkg $a)) (printf "package %s has no app %s (it has %s)" $pn $a (join ", " (sortAlpha $has))) (hasKey $appPkg $a))) -}}
       {{- end -}}
@@ -90,7 +44,6 @@
   {{- end -}}
 {{- end -}}
 
-{{- /* This chart's apps and their waves. */ -}}
 {{- $mine := dict -}}
 {{- range $path, $_ := ternary (dict) ($root.Files.Glob (printf "%s/*/*/app.yaml" (default "apps" $cfg.appsRoot))) $all -}}
   {{- $p := splitList "/" $path -}}
@@ -98,7 +51,6 @@
   {{- $_ := set $mine (index $p (sub (len $p) 2)) (int (default 0 $meta.wave)) -}}
 {{- end -}}
 
-{{- /* Every listed app: its package, whether it is on, its place in the order. */ -}}
 {{- $apps := dict -}}
 {{- range $name := keys $deps | sortAlpha -}}
   {{- $e := default dict (get $deps $name) -}}
@@ -144,7 +96,6 @@
   {{- end -}}
 {{- end -}}
 
-{{- /* Who meets each name: the app of that name, and every app listing it under provides. */ -}}
 {{- $providers := dict -}}
 {{- range $name, $a := $apps -}}
   {{- range $n := prepend $a.provides $name -}}
@@ -152,8 +103,6 @@
   {{- end -}}
 {{- end -}}
 
-{{- /* Every app that is on, anywhere: what it requires must be listed. Run in every render, so a
-       provider whose entry was removed can't slip out in the render that prunes it. */ -}}
 {{- range $name := keys $apps | sortAlpha -}}
   {{- $a := get $apps $name -}}
   {{- if $a.on -}}
@@ -194,7 +143,6 @@
       {{- end -}}
     {{- end -}}
   {{- else if $a.mine -}}
-    {{- /* Off: nothing that is on may still need it, or the removal would break it. */ -}}
     {{- range $n := prepend $a.provides $name -}}
       {{- $n = toString $n -}}
       {{- $others := list -}}
@@ -218,14 +166,6 @@
 {{- end -}}
 {{- end -}}
 
-{{- /*
-  argocd-app-loader.isOn — "true" if the app's toggle switches it on: in a package,
-  cluster.packages.<package>.apps.<name> (the catalogue's usual value, or the cluster's); in a
-  single chart, cluster.apps.<name>. A bool is taken as written. Anything else counts as on if it isn't empty,
-  or, with argocdAppLoader.requireToggle: false, always. NOT `default true`: sprig's default
-  treats an explicit false as empty. It doesn't look at whether the package is picked: values
-  files ask argocd-app-loader.running.
-*/ -}}
 {{- define "argocd-app-loader.isOn" -}}
 {{- $cfg := default dict .Values.argocdAppLoader -}}
 {{- $requireToggle := ternary $cfg.requireToggle true (kindIs "bool" $cfg.requireToggle) -}}
@@ -239,14 +179,9 @@
 {{- ternary "true" "false" $on -}}
 {{- end -}}
 
-{{- /*
-  argocd-app-loader.scoped — a package's own toggles or overrides ("key": apps | overrides), as
-  YAML: cluster.packages.<package>.<key> (or cluster.instancePackages.<package>.<key>); without a
-  package (a single chart), cluster.<key>.
-*/ -}}
 {{- define "argocd-app-loader.scoped" -}}
 {{- $c := default dict .Values.cluster -}}
-{{- $m := index $c .key -}}{{- /* index, not get: get gives "" for a missing key */ -}}
+{{- $m := index $c .key -}}
 {{- if .package -}}
   {{- $instance := hasKey (default dict $c.instancePackages) .package -}}
   {{- $p := index (ternary (default dict $c.instancePackages) (default dict $c.packages) $instance) .package -}}
@@ -255,14 +190,12 @@
   {{- end -}}
   {{- $m = index (default dict $p) .key -}}
 {{- end -}}
-{{- /* Checked here: through toYaml/fromYaml a list or a bool would come back as an empty map. */ -}}
 {{- if not (or (kindIs "invalid" $m) (kindIs "map" $m)) -}}
   {{- fail (printf "argocd-app-loader: %s must be a map of <app>: ..., got %v (a %s)" (include "argocd-app-loader.scopedKey" .) $m (kindOf $m)) -}}
 {{- end -}}
 {{- toYaml (default dict $m) -}}
 {{- end -}}
 
-{{- /* argocd-app-loader.scopedKey — where scoped reads, for messages. */ -}}
 {{- define "argocd-app-loader.scopedKey" -}}
 {{- if .package -}}
   {{- printf "cluster.%s.%s.%s" (ternary "instancePackages" "packages" (hasKey (default dict (default dict .Values.cluster).instancePackages) .package)) .package .key -}}
@@ -271,8 +204,6 @@
 {{- end -}}
 {{- end -}}
 
-{{- /* argocd-app-loader.noFlatToggles — with packages, toggles and overrides sit under the
-       package; flat ones would do nothing. Input: .Values.cluster. */ -}}
 {{- define "argocd-app-loader.noFlatToggles" -}}
 {{- range $old := list "apps" "overrides" -}}
   {{- if get (default dict $) $old -}}
@@ -281,15 +212,10 @@
 {{- end -}}
 {{- end -}}
 
-{{- /* argocd-app-loader.picked — "true" if a pick (cluster.packages.<name>) picks the package. */ -}}
 {{- define "argocd-app-loader.picked" -}}
 {{- ternary "true" "false" (and (kindIs "map" .) (kindIs "bool" .enabled) .enabled) -}}
 {{- end -}}
 
-{{- /*
-  argocd-app-loader.appPackages — app name -> package, from cluster.packages.<p>.apps and
-  cluster.instancePackages.<p>.apps, as YAML. Input: .Values.
-*/ -}}
 {{- define "argocd-app-loader.appPackages" -}}
 {{- $out := dict -}}
 {{- $c := default dict .cluster -}}
@@ -297,9 +223,9 @@
   {{- $list := default dict (get $c $kind) -}}
   {{- range $pn := keys $list | sortAlpha -}}
     {{- $p := get $list $pn -}}
-    {{- if not (kindIs "map" $p) }}{{ continue }}{{ end -}}{{- /* the root and scoped say why */ -}}
+    {{- if not (kindIs "map" $p) }}{{ continue }}{{ end -}}
     {{- range $a, $on := default dict $p.apps -}}
-      {{- if kindIs "invalid" $on }}{{ continue }}{{ end -}}{{- /* null: removed by a later file */ -}}
+      {{- if kindIs "invalid" $on }}{{ continue }}{{ end -}}
       {{- if not (kindIs "bool" $on) -}}
         {{- fail (printf "argocd-app-loader: cluster.%s.%s.apps.%s must be true or false, got %v" $kind $pn $a $on) -}}
       {{- end -}}
@@ -311,14 +237,9 @@
 {{- toYaml $out -}}
 {{- end -}}
 
-{{- /*
-  argocd-app-loader.running — "true" if an app runs on this cluster: the package that lists it is
-  picked (or is the one being rendered, which only renders while picked), and the app is on. For values files: {{ if eq (include "argocd-app-loader.running" (dict "Values" .Values "name" "certs")) "true" }}
-*/ -}}
 {{- define "argocd-app-loader.running" -}}
 {{- $appPkg := include "argocd-app-loader.appPackages" .Values | fromYaml -}}
 {{- if not $appPkg -}}
-  {{- /* A single chart without packages: its toggle. */ -}}
   {{- include "argocd-app-loader.isOn" (dict "Values" .Values "name" .name) -}}
 {{- else -}}
 {{- $pkg := get $appPkg .name | required (printf "argocd-app-loader: running: no package lists app %s (a typo?)" .name) -}}
@@ -329,11 +250,6 @@
 {{- end -}}
 {{- end -}}
 
-{{- /*
-  argocd-app-loader.provided — "true" if an app that runs here (see running) lists the name under
-  argocdAppLoader.dependencies.<app>.provides. For values files, to ask for a capability instead of
-  an app: {{ if eq (include "argocd-app-loader.provided" (dict "Values" .Values "name" "tls")) "true" }}
-*/ -}}
 {{- define "argocd-app-loader.provided" -}}
 {{- $found := false -}}
 {{- $known := false -}}

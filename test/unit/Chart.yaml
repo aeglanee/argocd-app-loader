@@ -1,5 +1,3 @@
-# helm-unittest can't test a library chart directly, so this consumer renders the loader against
-# small fixture apps under apps/unit/. Each test switches on only the apps it needs.
 apiVersion: v2
 name: unit
 type: application

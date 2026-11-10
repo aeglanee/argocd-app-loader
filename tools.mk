@@ -1,5 +1,3 @@
-# Tool images, each pinned by version and digest; Renovate updates both. HELM and YAMLLINT are built
-# in sessrumnir/devops (images/helm, images/yamllint); their digests come with the first release.
 ACTIONLINT := ghcr.io/sessrumnir/actionlint:1.7.12@sha256:17b0e408d9a576ccd4d13adabce1417d84afda8ac1277a27490500cff1429bc1
 GITLEAKS := ghcr.io/sessrumnir/gitleaks:8.30.1@sha256:58f37ae85b269849ce9f933f30de2eb9fe01d656041bd1b5e2dc1d42a2bbb795
 HELM := ghcr.io/sessrumnir/helm:stable
